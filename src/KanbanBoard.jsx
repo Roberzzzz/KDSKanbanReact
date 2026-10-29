@@ -1,7 +1,4 @@
-// KanbanBoard.jsx — Tablero Kanban del KDS (solo interfaz + Drag & Drop)
-// Dependencia: npm i @dnd-kit/core
-// Estilos en ./KanbanBoard.css
-import { useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import "./KanbanBoard.css";
 import {
   DndContext,
@@ -14,8 +11,9 @@ import {
   useDraggable,
   useDroppable,
 } from "@dnd-kit/core";
-
-/* ───────────────────────── Datos iniciales ───────────────────────── */
+import { NowProvider, useNow } from "./NowProvider";
+import { useKitchen, COLUMN_IDS } from "./useKitchen";
+import { formatClock, formatElapsed, timerStatus } from "./timeUtils";
 
 const COLUMNS = [
   {
@@ -38,51 +36,45 @@ const COLUMNS = [
   },
 ];
 
-// Estado normalizado: las órdenes viven en un diccionario y las columnas
-// solo guardan listas de ids. Mover una tarjeta = cambiar un id de lista.
-const INITIAL_ORDERS = {
-  "101": {
-    id: "101",
-    numero: 101,
-    mesa: "Mesa 4",
-    hora: "12:41",
-    items: [
-      { cantidad: 2, nombre: "Pabellón criollo", nota: "Sin plátano" },
-      { cantidad: 6, nombre: "Tequeños" },
-      { cantidad: 2, nombre: "Papelón con limón" },
-    ],
-  },
-  "102": {
-    id: "102",
-    numero: 102,
-    mesa: "Para llevar",
-    hora: "12:43",
-    items: [
-      { cantidad: 1, nombre: "Hamburguesa doble", nota: "Sin cebolla" },
-      { cantidad: 1, nombre: "Papas fritas" },
-    ],
-  },
-};
+const COLUMN_TITLES = Object.fromEntries(COLUMNS.map((c) => [c.id, c.title]));
 
-const INITIAL_COLUMNS = {
-  pendiente: ["101", "102"],
-  preparacion: [],
-  listo: [],
-};
+function Timer({ order }) {
+  const now = useNow();
+  const done = order.readyAt != null;
+  const elapsed = (done ? order.readyAt : now) - order.createdAt;
+  const status = timerStatus(elapsed, order.objetivoMin);
+  const text = formatElapsed(elapsed);
 
-/* ───────────────────────── Tarjeta (comanda) ───────────────────────── */
+  let label = "";
+  if (done) label = "Listo en";
+  else if (status === "late") label = "Retraso";
+  else if (status === "warn") label = "Por vencer";
 
-// Presentacional pura: se reutiliza en la lista y en el DragOverlay.
-function Ticket({ order, accent }) {
   return (
-    <div className="kds-ticket" style={{ "--accent": accent }}>
+    <span
+      className={`kds-timer is-${status}`}
+      role="timer"
+      aria-label={`${label} ${text}`.trim()}
+    >
+      {label && <span className="kds-timer-label">{label}</span>}
+      {text}
+    </span>
+  );
+}
+
+const stop = (e) => e.stopPropagation();
+
+function Ticket({ order, onDeliver }) {
+  return (
+    <div className="kds-ticket">
       <div className="kds-ticket-head">
         <span className="kds-ticket-num">#{order.numero}</span>
-        <span className="kds-ticket-meta">
-          <strong>{order.mesa}</strong>
-          <span>Ingresó {order.hora}</span>
-        </span>
+        <Timer order={order} />
       </div>
+      <p className="kds-ticket-meta">
+        <strong>{order.mesa}</strong>
+        <span>Ingresó {formatClock(order.createdAt)}</span>
+      </p>
       <ul className="kds-items">
         {order.items.map((item, i) => (
           <li key={i}>
@@ -94,11 +86,22 @@ function Ticket({ order, accent }) {
           </li>
         ))}
       </ul>
+      {onDeliver && (
+        <button
+          type="button"
+          className="kds-deliver"
+          onMouseDown={stop}
+          onTouchStart={stop}
+          onClick={() => onDeliver(order.id)}
+        >
+          Entregada
+        </button>
+      )}
     </div>
   );
 }
 
-function DraggableTicket({ order, accent }) {
+const DraggableTicket = memo(function DraggableTicket({ order, onDeliver }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: order.id,
   });
@@ -109,15 +112,14 @@ function DraggableTicket({ order, accent }) {
       className={`kds-ticket-wrap${isDragging ? " is-dragging" : ""}`}
       {...listeners}
       {...attributes}
+      role={onDeliver ? "group" : attributes.role}
     >
-      <Ticket order={order} accent={accent} />
+      <Ticket order={order} onDeliver={onDeliver} />
     </div>
   );
-}
+});
 
-/* ───────────────────────── Columna ───────────────────────── */
-
-function Column({ column, orders }) {
+function Column({ column, orders, onDeliver }) {
   const { setNodeRef, isOver } = useDroppable({ id: column.id });
 
   return (
@@ -136,7 +138,7 @@ function Column({ column, orders }) {
           <p className="kds-empty">{column.empty}</p>
         ) : (
           orders.map((order) => (
-            <DraggableTicket key={order.id} order={order} accent={column.color} />
+            <DraggableTicket key={order.id} order={order} onDeliver={onDeliver} />
           ))
         )}
       </div>
@@ -144,45 +146,120 @@ function Column({ column, orders }) {
   );
 }
 
-/* ───────────────────────── Tablero ───────────────────────── */
+function HistoryModal({ ids, orders, onClose }) {
+  const closeRef = useRef(null);
 
-export default function KanbanBoard() {
-  const [orders] = useState(INITIAL_ORDERS);
-  const [columns, setColumns] = useState(INITIAL_COLUMNS);
+  useEffect(() => {
+    closeRef.current?.focus();
+    const onKey = (e) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  return (
+    <div
+      className="kds-modal-backdrop"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <section
+        className="kds-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="kds-history-title"
+      >
+        <header className="kds-modal-head">
+          <h2 id="kds-history-title">Entregadas</h2>
+          <button
+            ref={closeRef}
+            type="button"
+            className="kds-btn kds-modal-close"
+            onClick={onClose}
+          >
+            Cerrar
+          </button>
+        </header>
+
+        <div className="kds-modal-body">
+          {ids.length === 0 ? (
+            <p className="kds-history-empty">Todavía no hay comandas entregadas.</p>
+          ) : (
+            <ul className="kds-history-list">
+              {ids.map((id) => {
+                const o = orders[id];
+                const prep = o.readyAt - o.createdAt;
+                const aTiempo = timerStatus(prep, o.objetivoMin) !== "late";
+                return (
+                  <li key={id}>
+                    <span className="kds-h-num">#{o.numero}</span>
+                    <span>{o.mesa}</span>
+                    <span>Preparada en {formatElapsed(prep)}</span>
+                    <span className={`kds-h-tag ${aTiempo ? "is-ok" : "is-late"}`}>
+                      {aTiempo ? "A tiempo" : "Con retraso"}
+                    </span>
+                    <span className="kds-h-time">Entregada {formatClock(o.deliveredAt)}</span>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function undoLabel(entry, orders) {
+  if (!entry) return "";
+  const n = orders[entry.id]?.numero;
+  return entry.kind === "move" ? `#${n} → ${COLUMN_TITLES[entry.to]}` : `entrega #${n}`;
+}
+
+function Board() {
+  const { state, move, deliver, undo } = useKitchen();
+  const { orders, columns, history } = state;
+
   const [activeId, setActiveId] = useState(null);
+  const [showHistory, setShowHistory] = useState(false);
+  const rootRef = useRef(null);
 
-  // Mouse con umbral de distancia; táctil con pulsación corta para no
-  // bloquear el scroll de la columna.
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 180, tolerance: 8 } }),
     useSensor(KeyboardSensor)
   );
 
-  const moveOrder = (id, to) =>
-    setColumns((prev) => {
-      const from = Object.keys(prev).find((c) => prev[c].includes(id));
-      if (!from || from === to || !prev[to]) return prev;
-      return {
-        ...prev,
-        [from]: prev[from].filter((x) => x !== id),
-        [to]: [...prev[to], id],
-      };
-    });
+  useEffect(() => {
+    const onKey = (e) => {
+      const visible = rootRef.current && rootRef.current.offsetParent !== null;
+      if (
+        visible &&
+        !showHistory &&
+        (e.ctrlKey || e.metaKey) &&
+        !e.shiftKey &&
+        e.key.toLowerCase() === "z"
+      ) {
+        e.preventDefault();
+        undo();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [undo, showHistory]);
 
   const handleDragEnd = ({ active, over }) => {
     setActiveId(null);
-    if (over) moveOrder(active.id, over.id);
+    if (over && COLUMN_IDS.includes(over.id)) move(active.id, over.id);
   };
 
-  const activeOrder = activeId ? orders[activeId] : null;
-  const activeColumn = activeId
-    ? COLUMNS.find((c) => columns[c.id].includes(activeId))
-    : null;
-  const total = Object.values(columns).reduce((n, ids) => n + ids.length, 0);
+  const lastUndo = state.undo[state.undo.length - 1];
+  const total = COLUMN_IDS.reduce((n, c) => n + columns[c].length, 0);
 
   return (
-    <div className="kds">
+    <div className="kds" ref={rootRef}>
       <header className="kds-top">
         <div className="kds-brand">
           <span className="kds-logo" aria-hidden="true">S</span>
@@ -196,6 +273,23 @@ export default function KanbanBoard() {
         </p>
       </header>
 
+      <div className="kds-toolbar">
+        <div className="kds-group">
+          <button type="button" className="kds-btn" disabled={!lastUndo} onClick={undo}>
+            Deshacer
+            {lastUndo && <span className="kds-btn-hint">{undoLabel(lastUndo, orders)}</span>}
+          </button>
+          <button
+            type="button"
+            className="kds-btn"
+            aria-haspopup="dialog"
+            onClick={() => setShowHistory(true)}
+          >
+            Historial ({history.length})
+          </button>
+        </div>
+      </div>
+
       <DndContext
         sensors={sensors}
         onDragStart={({ active }) => setActiveId(active.id)}
@@ -208,18 +302,35 @@ export default function KanbanBoard() {
               key={col.id}
               column={col}
               orders={columns[col.id].map((id) => orders[id])}
+              onDeliver={col.id === "listo" ? deliver : undefined}
             />
           ))}
         </main>
 
         <DragOverlay dropAnimation={{ duration: 180 }}>
-          {activeOrder ? (
+          {activeId ? (
             <div className="kds-ticket-wrap is-overlay">
-              <Ticket order={activeOrder} accent={activeColumn?.color} />
+              <Ticket order={orders[activeId]} />
             </div>
           ) : null}
         </DragOverlay>
       </DndContext>
+
+      {showHistory && (
+        <HistoryModal
+          ids={history}
+          orders={orders}
+          onClose={() => setShowHistory(false)}
+        />
+      )}
     </div>
+  );
+}
+
+export default function KanbanBoard() {
+  return (
+    <NowProvider>
+      <Board />
+    </NowProvider>
   );
 }

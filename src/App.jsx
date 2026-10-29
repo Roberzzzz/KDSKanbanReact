@@ -26,8 +26,6 @@ function App() {
         ))}
       </nav>
 
-      {/* Ambas vistas siguen montadas; solo se oculta la que no toca,
-          así no se pierde el carrito ni las comandas al cambiar. */}
       <div hidden={view !== "menu"}>
         <OrdersPage />
       </div>
