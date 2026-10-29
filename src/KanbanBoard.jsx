@@ -14,7 +14,6 @@ import {
 import { NowProvider, useNow } from "./NowProvider";
 import { useKitchen, COLUMN_IDS } from "./useKitchen";
 import { formatClock, formatElapsed, timerStatus } from "./timeUtils";
-
 const COLUMNS = [
   {
     id: "pendiente",
@@ -218,13 +217,34 @@ function undoLabel(entry, orders) {
   return entry.kind === "move" ? `#${n} → ${COLUMN_TITLES[entry.to]}` : `entrega #${n}`;
 }
 
-function Board() {
+function Board({ setView }) {
   const { state, move, deliver, undo } = useKitchen();
   const { orders, columns, history } = state;
 
   const [activeId, setActiveId] = useState(null);
   const [showHistory, setShowHistory] = useState(false);
+  
+  // Estado para controlar los 3 clics en el logo
+  const [clickCount, setClickCount] = useState(0);
+  const [showLoginBtn, setShowLoginBtn] = useState(false);
+
   const rootRef = useRef(null);
+
+  const handleLogoClick = () => {
+    setClickCount((prev) => {
+      const nextCount = prev + 1;
+      if (nextCount >= 3) {
+        setShowLoginBtn(true);
+        return 0;
+      }
+      return nextCount;
+    });
+  };
+
+  const handleGoToLogin = () => {
+    setShowLoginBtn(false);
+    setView("login");
+  };
 
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
@@ -262,12 +282,39 @@ function Board() {
     <div className="kds" ref={rootRef}>
       <header className="kds-top">
         <div className="kds-brand">
-          <span className="kds-logo" aria-hidden="true">S</span>
+          {/* Logo interactivo de la cocina */}
+          <span 
+            className="kds-logo" 
+            aria-hidden="true"
+            onClick={handleLogoClick}
+            style={{ cursor: "pointer", userSelect: "none" }}
+            title="Sazón Express"
+          >
+            S
+          </span>
           <div>
             <h1>BigDip Flavor's</h1>
             <p>Pantalla de cocina</p>
           </div>
         </div>
+
+        {/* Botón desplegado tras 3 clics */}
+        {showLoginBtn && (
+          <button
+            type="button"
+            className="kds-btn"
+            onClick={handleGoToLogin}
+            style={{
+              background: "var(--brand)",
+              color: "#ffffff",
+              borderColor: "var(--brand)",
+              fontWeight: "700"
+            }}
+          >
+            Ir al Login 🔓
+          </button>
+        )}
+
         <p className="kds-total">
           {total} {total === 1 ? "comanda" : "comandas"} en el tablero
         </p>
@@ -327,10 +374,10 @@ function Board() {
   );
 }
 
-export default function KanbanBoard() {
+export default function KanbanBoard({ setView }) {
   return (
     <NowProvider>
-      <Board />
+      <Board setView={setView} />
     </NowProvider>
   );
 }

@@ -1,0 +1,209 @@
+/* ==========================================================================
+   Sazón Express (KDS) - Módulo de Inicio de Sesión
+   ========================================================================== */
+
+.login-page {
+  /* Variables de la Guía de Estilo Oficial */
+  --sx-cream: #fff8ee;
+  --sx-surface: #ffffff;
+  --sx-ink: #2b2118;
+  --sx-muted: #6f6254;
+  --sx-accent: #c8501e;
+  --sx-accent-dark: #a83e12;
+  --sx-accent-soft: #fbe6d8;
+  --sx-line: #eadcc8;
+  --sx-radius: 14px;
+  --sx-shadow: 0 2px 8px rgba(43, 33, 24, 0.08);
+
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 100vh;
+  padding: 16px 24px 40px;
+  background: var(--sx-cream);
+  color: var(--sx-ink);
+  font-family: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  font-size: 16px;
+  line-height: 1.45;
+  text-align: left;
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.login-page *,
+.login-page *::before,
+.login-page *::after {
+  box-sizing: border-box;
+}
+
+/* Tarjeta contenedora del Login */
+.login-page__card {
+  width: 100%;
+  max-width: 420px;
+  padding: 32px 28px;
+  background: var(--sx-surface);
+  border: 1px solid var(--sx-line);
+  border-radius: var(--sx-radius);
+  box-shadow: var(--sx-shadow);
+}
+
+/* Encabezado y Logotipo */
+.login-page__header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 28px;
+  text-align: center;
+}
+
+.login-page__logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: var(--sx-accent);
+  box-shadow: inset 0 0 0 4px var(--sx-accent-soft);
+  color: #ffffff;
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.login-page__title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--sx-ink);
+}
+
+.login-page__subtitle {
+  margin: 4px 0 0;
+  font-size: 14px;
+  color: var(--sx-muted);
+}
+
+/* Formulario */
+.login-page__form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.login-page__field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.login-page__label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--sx-ink);
+}
+
+.login-page__input {
+  width: 100%;
+  min-height: 48px;
+  padding: 10px 14px;
+  font-family: inherit;
+  font-size: 16px;
+  color: var(--sx-ink);
+  background: var(--sx-surface);
+  border: 2px solid var(--sx-line);
+  border-radius: 12px;
+  outline: none;
+  transition: border-color 0.15s ease-in-out;
+}
+
+.login-page__input:focus {
+  border-color: var(--sx-accent);
+}
+
+/* Error de Formulario */
+.login-page__error {
+  margin: 0;
+  padding: 8px 12px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--sx-accent-dark);
+  background: var(--sx-accent-soft);
+  border-radius: 8px;
+}
+
+/* Botón Primario */
+.login-page__primary-button {
+  width: 100%;
+  min-height: 48px;
+  margin-top: 8px;
+  padding: 10px 20px;
+  font-family: inherit;
+  font-size: 16px;
+  font-weight: 700;
+  color: #ffffff;
+  background: var(--sx-accent);
+  border: 2px solid var(--sx-accent);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background-color 0.15s, border-color 0.15s;
+}
+
+.login-page__primary-button:hover:not(:disabled) {
+  background: var(--sx-accent-dark);
+  border-color: var(--sx-accent-dark);
+}
+
+.login-page__primary-button:disabled {
+  background: #efe6d8;
+  color: #7d705f;
+  border-color: var(--sx-line);
+  cursor: not-allowed;
+}
+
+/* Enlace a Vista Cliente */
+.login-page__footer {
+  margin-top: 24px;
+  text-align: center;
+}
+
+.login-page__link {
+  display: inline-block;
+  min-height: 44px;
+  line-height: 44px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--sx-accent);
+  text-decoration: none;
+}
+
+.login-page__link:hover {
+  color: var(--sx-accent-dark);
+  text-decoration: underline;
+}
+
+/* Indicador de Foco para Accesibilidad */
+.login-page button:focus-visible,
+.login-page a:focus-visible,
+.login-page input:focus-visible {
+  outline: 3px solid var(--sx-ink);
+  outline-offset: 2px;
+}
+
+/* Adaptabilidad para Móviles */
+@media (max-width: 560px) {
+  .login-page {
+    padding: 14px;
+  }
+
+  .login-page__card {
+    padding: 24px 18px;
+  }
+
+  .login-page__title {
+    font-size: 20px;
+  }
+}

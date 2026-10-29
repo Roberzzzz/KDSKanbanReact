@@ -14,7 +14,7 @@ import { categories, products } from "./data/products";
 
 import "./styles/OrdersPage.css";
 
-function OrdersPage() {
+function OrdersPage({ setView }) {
   // Categoría seleccionada en el filtro del menú
   const [selectedCategory, setSelectedCategory] = useState("Todos");
   // Productos del carrito: { id, name, price, quantity }
@@ -125,7 +125,7 @@ function OrdersPage() {
 
   return (
     <div className="orders-page">
-      <OrderHeader totalUnits={totalUnits} />
+      <OrderHeader totalUnits={totalUnits} setView={setView}/>
 
       <div className="orders-page__layout">
         <main className="orders-page__menu">

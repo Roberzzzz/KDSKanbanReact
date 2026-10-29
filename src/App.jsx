@@ -1,37 +1,23 @@
 import { useState } from "react";
 import OrdersPage from "./pages/orders";
 import KanbanBoard from "./KanbanBoard";
+import Login from "./Login";
 import "./App.css";
 
-const VIEWS = [
-  { id: "menu", label: "Menú" },
-  { id: "kanban", label: "Cocina" },
-];
-
 function App() {
-  const [view, setView] = useState("menu");
+  const [view, setView] = useState("login");
 
   return (
     <>
-      <nav className="app-nav">
-        {VIEWS.map((v) => (
-          <button
-            key={v.id}
-            className={`app-tab${view === v.id ? " is-active" : ""}`}
-            aria-pressed={view === v.id}
-            onClick={() => setView(v.id)}
-          >
-            {v.label}
-          </button>
-        ))}
-      </nav>
-
       <div hidden={view !== "menu"}>
-        <OrdersPage />
+        <OrdersPage setView={setView} />
       </div>
       <div hidden={view !== "kanban"}>
-        <KanbanBoard />
+        <KanbanBoard setView={setView} />
       </div>
+      <div hidden={view !== "login"}>
+        <Login setView={setView} />
+      </div> 
     </>
   );
 }
