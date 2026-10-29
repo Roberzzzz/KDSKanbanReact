@@ -1,0 +1,261 @@
+/* Estilos generales de la página de pedidos.
+   Todas las clases empiezan con .orders-page para no afectar a otras páginas. */
+
+.orders-page {
+  --orders-cream: #fff8ee;
+  --orders-surface: #ffffff;
+  --orders-ink: #2b2118;
+  --orders-muted: #6f6254;
+  --orders-accent: #c8501e;
+  --orders-accent-dark: #a83e12;
+  --orders-accent-soft: #fbe6d8;
+  --orders-line: #eadcc8;
+  --orders-radius: 14px;
+  --orders-shadow: 0 2px 8px rgba(43, 33, 24, 0.08);
+
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 100vh;
+  padding: 16px 24px 40px;
+  background: var(--orders-cream);
+  color: var(--orders-ink);
+  font-family: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial,
+    sans-serif;
+  font-size: 16px;
+  line-height: 1.45;
+  text-align: left;
+}
+
+.orders-page *,
+.orders-page *::before,
+.orders-page *::after {
+  box-sizing: border-box;
+}
+
+.orders-page button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.orders-page button:focus-visible,
+.orders-page a:focus-visible,
+.orders-page input:focus-visible + span {
+  outline: 3px solid var(--orders-ink);
+  outline-offset: 2px;
+}
+
+/* ---------- Encabezado ---------- */
+
+.orders-page__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  max-width: 1200px;
+  margin: 0 auto 16px;
+  padding: 10px 0;
+}
+
+.orders-page__brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.orders-page__logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: var(--orders-accent);
+  box-shadow: inset 0 0 0 4px var(--orders-accent-soft);
+}
+
+.orders-page__logo-letter {
+  color: #ffffff;
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.orders-page__title {
+  margin: 0;
+  font-size: 22px;
+  line-height: 1.2;
+  color: var(--orders-ink);
+}
+
+.orders-page__welcome {
+  margin: 0;
+  color: var(--orders-muted);
+  font-size: 15px;
+}
+
+.orders-page__cart-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 8px 16px;
+  border: 2px solid var(--orders-accent);
+  border-radius: 999px;
+  background: var(--orders-surface);
+  color: var(--orders-accent-dark);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.orders-page__cart-link:hover {
+  background: var(--orders-accent-soft);
+}
+
+.orders-page__cart-badge {
+  min-width: 26px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--orders-accent);
+  color: #ffffff;
+  font-size: 14px;
+  text-align: center;
+}
+
+/* ---------- Distribución principal ---------- */
+
+.orders-page__layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 24px;
+  align-items: start;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.orders-page__menu {
+  min-width: 0;
+}
+
+/* ---------- Categorías ---------- */
+
+.orders-page__categories {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.orders-page__category {
+  min-height: 44px;
+  padding: 8px 18px;
+  border: 2px solid var(--orders-line);
+  border-radius: 999px;
+  background: var(--orders-surface);
+  color: var(--orders-ink);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.orders-page__category:hover {
+  border-color: var(--orders-accent);
+}
+
+.orders-page__category--active {
+  border-color: var(--orders-accent);
+  background: var(--orders-accent);
+  color: #ffffff;
+}
+
+/* ---------- Cuadrícula de productos ---------- */
+
+.orders-page__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 18px;
+}
+
+.orders-page__empty-products {
+  padding: 32px;
+  border: 2px dashed var(--orders-line);
+  border-radius: var(--orders-radius);
+  color: var(--orders-muted);
+  text-align: center;
+}
+
+/* ---------- Botones compartidos ---------- */
+
+.orders-page__primary-button,
+.orders-page__secondary-button {
+  min-height: 48px;
+  padding: 10px 20px;
+  border-radius: 10px;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.orders-page__primary-button {
+  width: 100%;
+  border: 2px solid var(--orders-accent);
+  background: var(--orders-accent);
+  color: #ffffff;
+}
+
+.orders-page__primary-button:hover:not(:disabled) {
+  border-color: var(--orders-accent-dark);
+  background: var(--orders-accent-dark);
+}
+
+.orders-page__primary-button:disabled {
+  border-color: var(--orders-line);
+  background: #efe6d8;
+  color: #7d705f;
+  cursor: not-allowed;
+}
+
+.orders-page__secondary-button {
+  border: 2px solid var(--orders-line);
+  background: var(--orders-surface);
+  color: var(--orders-ink);
+}
+
+.orders-page__secondary-button:hover {
+  border-color: var(--orders-accent);
+}
+
+/* ---------- Pantallas medianas y pequeñas ---------- */
+
+@media (max-width: 960px) {
+  .orders-page__layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 560px) {
+  .orders-page {
+    padding: 12px 14px 32px;
+  }
+
+  .orders-page__header {
+    flex-wrap: wrap;
+  }
+
+  .orders-page__title {
+    font-size: 20px;
+  }
+
+  .orders-page__grid {
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 12px;
+  }
+
+  /* Las categorías se deslizan en una sola fila para ocupar menos altura */
+  .orders-page__categories {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 6px;
+  }
+
+  .orders-page__category {
+    flex: 0 0 auto;
+  }
+}
