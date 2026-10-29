@@ -1,0 +1,181 @@
+/* KanbanBoard.css — pantalla de cocina.
+   Misma paleta del menú (crema + naranja quemado), pensada para leerse
+   de un vistazo a un metro de distancia. */
+
+.kds {
+  --bg: #fff8ee;          /* crema de la página */
+  --lane: #faf0e1;        /* fondo de cada columna */
+  --surface: #ffffff;
+  --edge: #c9b08c;        /* borde de las comandas: se separa de la columna */
+  --line: #eadcc8;
+  --ink: #2b1a10;
+  --muted: #6f6254;
+  --brand: #c8501e;
+  --brand-dark: #a83e12;
+  --tint: #fbe6d8;
+
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  line-height: 1.35;
+  font-variant-numeric: tabular-nums;
+}
+.kds *, .kds *::before, .kds *::after { box-sizing: border-box; }
+
+/* Encabezado */
+.kds-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 16px 24px 16px;
+}
+.kds-brand { display: flex; align-items: center; gap: 12px; }
+.kds-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: var(--brand);
+  box-shadow: inset 0 0 0 4px var(--tint);
+  color: #fff;
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1;
+}
+.kds-top h1 { margin: 0; font-size: 22px; font-weight: 800; line-height: 1.2; }
+.kds-brand p { margin: 0; font-size: 15px; color: var(--muted); }
+.kds-total { margin: 0; font-size: 15px; color: var(--muted); }
+
+/* Tablero */
+.kds-board {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 24px 24px;
+}
+
+/* Columnas: una zona tintada, no otra tarjeta */
+.kds-col {
+  display: flex;
+  flex-direction: column;
+  min-height: 420px;
+  background: var(--lane);
+  border: 2px dashed transparent;
+  border-radius: 14px;
+  transition: border-color 0.15s, background 0.15s;
+}
+.kds-col.is-over {
+  border-color: var(--brand);
+  background: var(--tint);
+}
+.kds-col-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 16px 12px;
+}
+.kds-col-head::before {
+  content: "";
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.kds-col-head h2 { margin: 0; font-size: 18px; font-weight: 800; }
+.kds-count {
+  margin-left: auto;
+  min-width: 30px;
+  padding: 2px 10px;
+  text-align: center;
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--brand-dark);
+  background: var(--surface);
+  border-radius: 999px;
+}
+
+.kds-col-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 0 12px 14px;
+}
+.kds-empty {
+  margin: 0;
+  padding: 28px 16px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 15px;
+  border: 2px dashed var(--edge);
+  border-radius: 10px;
+}
+
+/* Arrastre */
+.kds-ticket-wrap {
+  cursor: grab;
+  touch-action: manipulation;
+  border-radius: 10px;
+  transition: opacity 0.15s;
+}
+.kds-ticket-wrap:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; }
+.kds-ticket-wrap.is-dragging { opacity: 0.35; }
+.kds-ticket-wrap.is-overlay {
+  cursor: grabbing;
+  box-shadow: 0 6px 0 rgba(43, 26, 16, 0.18);
+}
+
+/* Comanda: bien delimitada contra la columna */
+.kds-ticket {
+  padding: 12px 14px 14px;
+  background: var(--surface);
+  border: 2px solid var(--edge);
+  border-radius: 10px;
+  transition: border-color 0.15s;
+}
+.kds-ticket-wrap:hover .kds-ticket { border-color: var(--brand); }
+
+.kds-ticket-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  padding-bottom: 10px;
+  margin-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+}
+.kds-ticket-num { font-size: 28px; font-weight: 800; line-height: 1; }
+.kds-ticket-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  font-size: 14px;
+  color: var(--muted);
+}
+.kds-ticket-meta strong { font-size: 17px; font-weight: 700; color: var(--ink); }
+
+.kds-items { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+.kds-items li { display: flex; align-items: baseline; gap: 10px; }
+.kds-qty { min-width: 32px; font-size: 20px; font-weight: 800; color: var(--brand-dark); }
+.kds-item-body { display: flex; flex-direction: column; gap: 1px; }
+.kds-item-name { font-size: 18px; font-weight: 600; line-height: 1.25; }
+.kds-note { font-size: 16px; font-weight: 700; color: var(--brand-dark); }
+
+/* Pantallas angostas: columnas apiladas */
+@media (max-width: 800px) {
+  .kds-top { flex-wrap: wrap; padding: 16px; }
+  .kds-board { grid-template-columns: 1fr; padding: 0 16px 16px; }
+  .kds-col { min-height: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .kds * { transition: none !important; }
+}

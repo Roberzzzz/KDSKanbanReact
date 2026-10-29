@@ -1,0 +1,26 @@
+/* Barra para cambiar entre Menú y Cocina */
+.app-nav {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px;
+  background: #fff8ee;
+  border-bottom: 1px solid #eadcc8;
+}
+.app-tab {
+  min-height: 44px;
+  padding: 8px 20px;
+  font: 600 15px "Segoe UI", system-ui, sans-serif;
+  color: #2b2118;
+  background: #fff;
+  border: 2px solid #eadcc8;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.app-tab:hover { border-color: #c8501e; }
+.app-tab.is-active {
+  color: #fff;
+  background: #c8501e;
+  border-color: #c8501e;
+}
+.app-tab:focus-visible { outline: 3px solid #2b2118; outline-offset: 2px; }
