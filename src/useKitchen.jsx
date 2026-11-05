@@ -1,4 +1,4 @@
-import { useCallback, useReducer } from "react";
+import { createContext, useContext, useCallback, useReducer } from "react";
 import { getInitialOrders } from "./orderService";
 
 export const COLUMN_IDS = ["pendiente", "preparacion", "listo"];
@@ -73,6 +73,7 @@ function reducer(state, action) {
             [from]: destino,
           },
         };
+        
       }
 
       const { id, fromIndex } = last;
@@ -87,17 +88,44 @@ function reducer(state, action) {
       };
     }
 
+    case "add": {
+      const { order } = action;
+      return {
+        ...state,
+        orders: { ...state.orders, [order.id]: order },
+        columns: {
+          ...state.columns,
+          pendiente: [order.id, ...state.columns.pendiente], // Entra de primero en "Pendiente"
+        },
+      };
+    }
     default:
       return state;
   }
 }
 
-export function useKitchen() {
+const KitchenContext = createContext(null);
+
+
+export function KitchenProvider({ children }) {
   const [state, dispatch] = useReducer(reducer, undefined, createInitialState);
 
   const move = useCallback((id, to) => dispatch({ type: "move", id, to, now: Date.now() }), []);
   const deliver = useCallback((id) => dispatch({ type: "deliver", id, now: Date.now() }), []);
   const undo = useCallback(() => dispatch({ type: "undo" }), []);
+  const addOrder = useCallback((order) => dispatch({ type: "add", order }), []);
 
-  return { state, move, deliver, undo };
+  return (
+    <KitchenContext.Provider value={{ state, move, deliver, undo, addOrder }}>
+      {children}
+    </KitchenContext.Provider>
+  );
+}
+
+export function useKitchen() {
+  const context = useContext(KitchenContext);
+  if (!context) {
+    throw new Error("useKitchen debe ser usado dentro de un KitchenProvider");
+  }
+  return context;
 }

@@ -11,6 +11,7 @@ import ShoppingCart from "./components/ShoppingCart";
 import PaymentModal from "./components/PaymentModal";
 import OrderConfirmation from "./components/OrderConfirmation";
 import { categories, products } from "./data/products";
+import { useKitchen } from "../../useKitchen";
 
 import "./styles/OrdersPage.css";
 
@@ -25,6 +26,8 @@ function OrdersPage({ setView }) {
   const [paymentMethod, setPaymentMethod] = useState("");
   // Pedido confirmado (null mientras no se haya confirmado ninguno)
   const [confirmedOrder, setConfirmedOrder] = useState(null);
+
+  const { addOrder } = useKitchen();
 
   // Valores calculados a partir del estado
 
@@ -102,11 +105,33 @@ function OrdersPage({ setView }) {
   }
 
   function confirmOrder() {
-    if (cartItems.length === 0 || paymentMethod === "") return;
+if (cartItems.length === 0 || paymentMethod === "") return;
 
-    // Objeto local que más adelante podría usar el panel de cocina
+    // Generamos un identificador y número de comanda compatibles con el Kanban
+    const orderId = "ord-" + Date.now();
+    const orderNumber = Math.floor(1000 + Math.random() * 9000);
+
+    // 2. Construimos el objeto con la estructura que espera KanbanBoard / Ticket
+    const newKitchenOrder = {
+      id: orderId,
+      numero: orderNumber,
+      mesa: "Mesa / Local", // Puedes cambiarlo si el cliente elige mesa o delivery
+      createdAt: Date.now(),
+      objetivoMin: 15, // Tiempo estimado por defecto
+      readyAt: null,
+      items: cartItems.map((item) => ({
+        nombre: item.name,
+        cantidad: item.quantity,
+        nota: "", // Puedes añadir notas si las tienes en el carrito
+      })),
+    };
+
+    // 3. Enviamos la orden al sistema de cocina
+    addOrder(newKitchenOrder);
+
+    // 4. Creamos el objeto para la confirmación visual del cliente
     const order = {
-      number: "SE-" + Math.floor(1000 + Math.random() * 9000),
+      number: "SE-" + orderNumber,
       items: cartItems,
       total: total,
       paymentMethod: paymentMethod,
