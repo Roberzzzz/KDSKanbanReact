@@ -42,13 +42,13 @@ export default function OrderHeader({ totalUnits, setView }) {
             cursor: "pointer",
             userSelect: "none"
           }}
-          title="Sazón Express"
+          title="BigDip Flavor's"
         >
           S
         </span>
 
         <div>
-          <h1 style={{ margin: 0, fontSize: "22px", fontWeight: "800" }}>Sazón Express</h1>
+          <h1 style={{ margin: 0, fontSize: "22px", fontWeight: "800" }}>BigDip Flavor's</h1>
           <p style={{ margin: 0, fontSize: "15px", color: "#6f6254" }}>Menú de Pedidos</p>
         </div>
       </div>
