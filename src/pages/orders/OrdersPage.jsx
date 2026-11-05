@@ -92,7 +92,7 @@ function OrdersPage({ setView }) {
     setCartItems(cartItems.filter((item) => item.id !== productId));
   }
 
-  // ---------- Pago y confirmación (simulados) ----------
+  // ---------- Pago y confirmación ----------
 
   function openPayment() {
     if (cartItems.length === 0) return; 
@@ -104,44 +104,72 @@ function OrdersPage({ setView }) {
     setIsPaymentOpen(false);
   }
 
-  function confirmOrder() {
-if (cartItems.length === 0 || paymentMethod === "") return;
+async function confirmOrder() {
+    if (cartItems.length === 0 || paymentMethod === "") return;
 
-    // Generamos un identificador y número de comanda compatibles con el Kanban
-    const orderId = "ord-" + Date.now();
-    const orderNumber = Math.floor(1000 + Math.random() * 9000);
+    // ID de método de pago según tu tabla 'metodos_pago' (1: Efectivo, 2: Tarjeta)
+    const metodoPagoId = paymentMethod === "efectivo" ? 1 : 2;
 
-    // 2. Construimos el objeto con la estructura que espera KanbanBoard / Ticket
-    const newKitchenOrder = {
-      id: orderId,
-      numero: orderNumber,
-      mesa: "Mesa / Local", // Puedes cambiarlo si el cliente elige mesa o delivery
-      createdAt: Date.now(),
-      objetivoMin: 15, // Tiempo estimado por defecto
-      readyAt: null,
+    const payload = {
+      mesa: "Mesa / Local",
+      nombre_cliente: "Cliente",
+      metodo_pago_id: metodoPagoId,
       items: cartItems.map((item) => ({
-        nombre: item.name,
+        producto_id: item.id,
         cantidad: item.quantity,
-        nota: "", // Puedes añadir notas si las tienes en el carrito
+        precio_unitario: item.price,
+        nota: item.note || "",
       })),
     };
 
-    // 3. Enviamos la orden al sistema de cocina
-    addOrder(newKitchenOrder);
+    try {
+      const response = await fetch("http://localhost:5000/api/pedidos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
 
-    // 4. Creamos el objeto para la confirmación visual del cliente
-    const order = {
-      number: "SE-" + orderNumber,
-      items: cartItems,
-      total: total,
-      paymentMethod: paymentMethod,
-      status: "pendiente",
-    };
+      if (response.ok) {
+        const nuevoPedidoBD = await response.json();
 
-    setConfirmedOrder(order);
-    setIsPaymentOpen(false);
-    setCartItems([]);
-    setPaymentMethod("");
+        // Estructuramos la orden para el estado local del KDS Kanban
+        const newKitchenOrder = {
+          id: String(nuevoPedidoBD.id),
+          numero: nuevoPedidoBD.numero,
+          mesa: "Mesa / Local",
+          createdAt: new Date(nuevoPedidoBD.creado_en).getTime(),
+          readyAt: null,
+          deliveredAt: null,
+          estado: "pendiente",
+          objetivoMin: 15,
+          items: cartItems.map((item) => ({
+            cantidad: item.quantity,
+            nombre: item.name,
+            nota: item.note || "",
+            minutos: 10,
+          })),
+        };
+
+        // Añadir a la vista local del KDS
+        addOrder(newKitchenOrder);
+
+        setConfirmedOrder({
+          number: "SE-" + nuevoPedidoBD.numero,
+          items: cartItems,
+          total: total,
+          paymentMethod: paymentMethod,
+          status: "pendiente",
+        });
+
+        setIsPaymentOpen(false);
+        setCartItems([]);
+        setPaymentMethod("");
+      } else {
+        console.error("Error al registrar el pedido en el servidor.");
+      }
+    } catch (error) {
+      console.error("Error de conexión con el backend:", error);
+    }
   }
 
   function backToMenu() {
