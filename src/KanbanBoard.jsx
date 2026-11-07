@@ -1,5 +1,6 @@
 import { memo, useEffect, useRef, useState } from "react";
 import "./KanbanBoard.css";
+import "./KanbanDishes.css";
 import {
   DndContext,
   DragOverlay,
@@ -63,7 +64,73 @@ function Timer({ order }) {
 
 const stop = (e) => e.stopPropagation();
 
-function Ticket({ order, onDeliver }) {
+// Cuenta regresiva de UN plato: tiempo estimado del producto menos lo que lleva.
+// Pasado el tiempo sigue contando en negativo (−01:20).
+function DishTimer({ item }) {
+  const now = useNow();
+  const elapsed = now - item.startedAt;
+  const remaining = item.minutos * 60000 - elapsed;
+  const status = timerStatus(elapsed, item.minutos);
+  const text = remaining >= 0 ? formatElapsed(remaining) : `−${formatElapsed(-remaining)}`;
+
+  let label = "";
+  if (status === "late") label = "Retraso";
+  else if (status === "warn") label = "Por vencer";
+
+  return (
+    <span
+      className={`kds-dish-timer is-${status}`}
+      role="timer"
+      aria-label={`${label} ${text}`.trim()}
+    >
+      {label && <span className="kds-timer-label">{label}</span>}
+      {text}
+    </span>
+  );
+}
+
+// Estado de cada plato según la columna:
+// pendiente -> tiempo estimado | preparación -> cuenta regresiva + "Listo" | listo -> terminado
+function Dish({ order, item, onItemDone }) {
+  const minutos = item.minutos || 0;
+  const terminado =
+    order.estado === "listo" || (order.estado === "preparacion" && item.doneAt != null);
+
+  if (terminado) {
+    return (
+      <span className="kds-dish">
+        <span className="kds-dish-tag">✓ Listo</span>
+      </span>
+    );
+  }
+
+  if (order.estado === "preparacion" && item.startedAt != null) {
+    return (
+      <span className="kds-dish">
+        {minutos > 0 && <DishTimer item={item} />}
+        {onItemDone && item.id != null && (
+          <button
+            type="button"
+            className="kds-dish-done"
+            onMouseDown={stop}
+            onTouchStart={stop}
+            onClick={() => onItemDone(order.id, item.id)}
+          >
+            Listo
+          </button>
+        )}
+      </span>
+    );
+  }
+
+  return minutos > 0 ? (
+    <span className="kds-dish">
+      <span className="kds-dish-est">{minutos} min</span>
+    </span>
+  ) : null;
+}
+
+function Ticket({ order, onDeliver, onItemDone }) {
   return (
     <div className="kds-ticket">
       <div className="kds-ticket-head">
@@ -76,11 +143,12 @@ function Ticket({ order, onDeliver }) {
       </p>
       <ul className="kds-items">
         {order.items.map((item, i) => (
-          <li key={i}>
+          <li key={item.id ?? i}>
             <span className="kds-qty">{item.cantidad}×</span>
             <span className="kds-item-body">
               <span className="kds-item-name">{item.nombre}</span>
               {item.nota && <span className="kds-note">{item.nota}</span>}
+              <Dish order={order} item={item} onItemDone={onItemDone} />
             </span>
           </li>
         ))}
@@ -100,7 +168,7 @@ function Ticket({ order, onDeliver }) {
   );
 }
 
-const DraggableTicket = memo(function DraggableTicket({ order, onDeliver }) {
+const DraggableTicket = memo(function DraggableTicket({ order, onDeliver, onItemDone }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: order.id,
   });
@@ -113,12 +181,12 @@ const DraggableTicket = memo(function DraggableTicket({ order, onDeliver }) {
       {...attributes}
       role={onDeliver ? "group" : attributes.role}
     >
-      <Ticket order={order} onDeliver={onDeliver} />
+      <Ticket order={order} onDeliver={onDeliver} onItemDone={onItemDone} />
     </div>
   );
 });
 
-function Column({ column, orders, onDeliver }) {
+function Column({ column, orders, onDeliver, onItemDone }) {
   const { setNodeRef, isOver } = useDroppable({ id: column.id });
 
   return (
@@ -137,7 +205,12 @@ function Column({ column, orders, onDeliver }) {
           <p className="kds-empty">{column.empty}</p>
         ) : (
           orders.map((order) => (
-            <DraggableTicket key={order.id} order={order} onDeliver={onDeliver} />
+            <DraggableTicket
+              key={order.id}
+              order={order}
+              onDeliver={onDeliver}
+              onItemDone={onItemDone}
+            />
           ))
         )}
       </div>
@@ -214,11 +287,13 @@ function HistoryModal({ ids, orders, onClose }) {
 function undoLabel(entry, orders) {
   if (!entry) return "";
   const n = orders[entry.id]?.numero;
-  return entry.kind === "move" ? `#${n} → ${COLUMN_TITLES[entry.to]}` : `entrega #${n}`;
+  if (entry.kind === "move") return `#${n} → ${COLUMN_TITLES[entry.to]}`;
+  if (entry.kind === "item") return `plato de #${n}`;
+  return `entrega #${n}`;
 }
 
 function Board({ setView }) {
-  const { state, move, deliver, undo } = useKitchen();
+  const { state, move, deliver, undo, markItemDone } = useKitchen();
   const { orders, columns, history } = state;
 
   const [activeId, setActiveId] = useState(null);
@@ -350,6 +425,7 @@ function Board({ setView }) {
               column={col}
               orders={columns[col.id].map((id) => orders[id])}
               onDeliver={col.id === "listo" ? deliver : undefined}
+              onItemDone={markItemDone}
             />
           ))}
         </main>

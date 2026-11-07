@@ -19,12 +19,24 @@ router.get('/vista', async (req, res) => {
     const result = await Promise.all(
       pedidos.map(async (p) => {
         const itemsQuery = `
-          SELECT d.cantidad, pr.nombre, d.nota, pr.tiempo_preparacion_min AS minutos
+          SELECT d.id, d.cantidad, pr.nombre, d.nota,
+                 pr.tiempo_preparacion_min AS minutos,
+                 d.iniciado_en, d.terminado_en
           FROM public.detalle_pedido d
           JOIN public.productos pr ON pr.id = d.producto_id
-          WHERE d.pedido_id = $1;
+          WHERE d.pedido_id = $1
+          ORDER BY d.id;
         `;
-        const { rows: items } = await pool.query(itemsQuery, [p.id]);
+        const { rows: itemRows } = await pool.query(itemsQuery, [p.id]);
+        const items = itemRows.map((d) => ({
+          id: String(d.id),
+          cantidad: d.cantidad,
+          nombre: d.nombre,
+          nota: d.nota,
+          minutos: d.minutos,
+          startedAt: d.iniciado_en ? new Date(d.iniciado_en).getTime() : null,
+          doneAt: d.terminado_en ? new Date(d.terminado_en).getTime() : null,
+        }));
         return {
           id: String(p.id),
           numero: p.numero,
@@ -102,31 +114,115 @@ router.post('/', async (req, res) => {
 
 // PATCH /api/pedidos/:id/estado: Actualizar estado desde el Kanban (mover columnas)
 router.patch('/:id/estado', async (req, res) => {
+  const client = await pool.connect();
   try {
     const { id } = req.params;
-    const { estado } = req.body; // 'preparacion', 'listo', 'entregado'
+    const { estado } = req.body; // 'pendiente', 'preparacion', 'listo', 'entregado'
 
-    let updateQuery = 'UPDATE public.pedidos SET estado = $1';
-    const params = [estado, id];
-
-    if (estado === 'listo') {
-      updateQuery += ', listo_en = NOW() WHERE id = $2 RETURNING *;';
-    } else if (estado === 'entregado') {
-      updateQuery += ', entregado_en = NOW() WHERE id = $2 RETURNING *;';
-    } else {
-      updateQuery += ' WHERE id = $2 RETURNING *;';
+    if (!['pendiente', 'preparacion', 'listo', 'entregado'].includes(estado)) {
+      return res.status(400).json({ error: 'Estado no válido' });
     }
 
-    const { rows } = await pool.query(updateQuery, params);
+    await client.query('BEGIN');
+
+    // Marcas de tiempo del pedido según el nuevo estado
+    let updateQuery = 'UPDATE public.pedidos SET estado = $1';
+    if (estado === 'listo') {
+      updateQuery += ', listo_en = COALESCE(listo_en, NOW()), entregado_en = NULL';
+    } else if (estado === 'entregado') {
+      updateQuery += ', entregado_en = NOW()';
+    } else {
+      // Si la comanda sale de "listo", su cronómetro se reanuda
+      updateQuery += ', listo_en = NULL, entregado_en = NULL';
+    }
+    updateQuery += ' WHERE id = $2 RETURNING *;';
+
+    const { rows } = await client.query(updateQuery, [estado, id]);
 
     if (rows.length === 0) {
+      await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Pedido no encontrado' });
     }
 
+    // Tiempos por plato: al pasar a preparación arrancan las cuentas regresivas;
+    // si vuelve a pendiente, se reinician.
+    if (estado === 'preparacion') {
+      await client.query(
+        'UPDATE public.detalle_pedido SET iniciado_en = COALESCE(iniciado_en, NOW()) WHERE pedido_id = $1',
+        [id]
+      );
+    } else if (estado === 'pendiente') {
+      await client.query(
+        'UPDATE public.detalle_pedido SET iniciado_en = NULL, terminado_en = NULL WHERE pedido_id = $1',
+        [id]
+      );
+    }
+
+    await client.query('COMMIT');
     res.json({ success: true, pedido: rows[0] });
   } catch (error) {
+    await client.query('ROLLBACK');
     console.error('Error al actualizar estado:', error);
     res.status(500).json({ error: 'Error al mover comanda' });
+  } finally {
+    client.release();
+  }
+});
+
+// PATCH /api/pedidos/:id/items/:itemId: marcar (o desmarcar) un plato como terminado.
+// Si era el último plato pendiente de una comanda en preparación, la comanda pasa a "listo".
+router.patch('/:id/items/:itemId', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { id, itemId } = req.params;
+    const { terminado } = req.body; // true | false
+
+    await client.query('BEGIN');
+
+    const updateItem = terminado
+      ? `UPDATE public.detalle_pedido
+         SET terminado_en = NOW(), iniciado_en = COALESCE(iniciado_en, NOW())
+         WHERE id = $1 AND pedido_id = $2
+         RETURNING id;`
+      : `UPDATE public.detalle_pedido
+         SET terminado_en = NULL
+         WHERE id = $1 AND pedido_id = $2
+         RETURNING id;`;
+    const { rowCount } = await client.query(updateItem, [itemId, id]);
+
+    if (rowCount === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Plato no encontrado' });
+    }
+
+    let estado = null;
+    if (terminado) {
+      const { rows } = await client.query(
+        `SELECT COUNT(*)::int AS faltan
+         FROM public.detalle_pedido
+         WHERE pedido_id = $1 AND terminado_en IS NULL;`,
+        [id]
+      );
+      if (rows[0].faltan === 0) {
+        const moved = await client.query(
+          `UPDATE public.pedidos
+           SET estado = 'listo', listo_en = COALESCE(listo_en, NOW())
+           WHERE id = $1 AND estado = 'preparacion'
+           RETURNING estado;`,
+          [id]
+        );
+        if (moved.rowCount > 0) estado = 'listo';
+      }
+    }
+
+    await client.query('COMMIT');
+    res.json({ success: true, estado });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Error al actualizar plato:', error);
+    res.status(500).json({ error: 'Error al actualizar el plato' });
+  } finally {
+    client.release();
   }
 });
 
