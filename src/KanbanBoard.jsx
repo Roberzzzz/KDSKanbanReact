@@ -292,7 +292,7 @@ function undoLabel(entry, orders) {
   return `entrega #${n}`;
 }
 
-function Board({ setView }) {
+function Board({ setView, currentUser, onLogout }) { // <--- Agrégalos aquí
   const { state, move, deliver, undo, markItemDone } = useKitchen();
   const { orders, columns, history } = state;
 
@@ -372,6 +372,17 @@ function Board({ setView }) {
             <p>Pantalla de cocina</p>
           </div>
         </div>
+        {/* Botón condicional para Administradores */}
+        {currentUser?.rol === "admin" && (
+          <button
+            type="button"
+            className="kds-btn"
+            onClick={() => setView("admin")}
+            style={{ background: "var(--brand)", color: "#fff", fontWeight: "700" }}
+          >
+            Administrar Usuarios
+          </button>
+        )}
 
         {/* Botón desplegado tras 3 clics */}
         {showLoginBtn && (
@@ -450,10 +461,10 @@ function Board({ setView }) {
   );
 }
 
-export default function KanbanBoard({ setView }) {
+export default function KanbanBoard({ setView, currentUser, onLogout }) {
   return (
     <NowProvider>
-      <Board setView={setView} />
+      <Board setView={setView} currentUser={currentUser} onLogout={onLogout} />
     </NowProvider>
   );
 }
