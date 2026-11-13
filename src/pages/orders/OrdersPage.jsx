@@ -15,6 +15,9 @@ import { useKitchen } from "../../useKitchen";
 
 import "./styles/OrdersPage.css";
 
+const MAX_UNIDADES_PRODUCTO = 15;
+const MAX_ITEMS_CARRITO = 50;
+
 function OrdersPage({ setView }) {
   // Categoría seleccionada en el filtro del menú
   const [selectedCategory, setSelectedCategory] = useState("Todos");
@@ -26,11 +29,20 @@ function OrdersPage({ setView }) {
   const [paymentMethod, setPaymentMethod] = useState("");
   // Pedido confirmado (null mientras no se haya confirmado ninguno)
   const [confirmedOrder, setConfirmedOrder] = useState(null);
+  // Estado para la ventana flotante de avisos / errores de stock o límites
+  const [alertaModal, setAlertaModal] = useState({ visible: false, mensaje: "" });
 
   const { addOrder } = useKitchen();
 
-  // Valores calculados a partir del estado
+  // Función auxiliar para mostrar avisos temporales
+  const mostrarAviso = (mensaje) => {
+    setAlertaModal({ visible: true, mensaje });
+    setTimeout(() => {
+      setAlertaModal({ visible: false, mensaje: "" });
+    }, 4500);
+  };
 
+  // Valores calculados a partir del estado
   const visibleProducts =
     selectedCategory === "Todos"
       ? products
@@ -43,10 +55,23 @@ function OrdersPage({ setView }) {
   );
   const total = subtotal; 
 
-  //carrito 
+  // ---------- Carrito y Validaciones ----------
 
   function addToCart(product) {
     const existingItem = cartItems.find((item) => item.id === product.id);
+    const cantidadActual = existingItem ? existingItem.quantity : 0;
+
+    // Validar límite máximo por producto (15 unidades)
+    if (cantidadActual + 1 > MAX_UNIDADES_PRODUCTO) {
+      mostrarAviso(`Límite alcanzado: Solo puedes pedir un máximo de ${MAX_UNIDADES_PRODUCTO} unidades de este producto.`);
+      return;
+    }
+
+    // Validar límite total de items en el carrito (50 unidades)
+    if (totalUnits + 1 > MAX_ITEMS_CARRITO) {
+      mostrarAviso(`El carrito está lleno. El límite máximo es de ${MAX_ITEMS_CARRITO} items en total.`);
+      return;
+    }
 
     if (existingItem) {
       setCartItems(
@@ -65,9 +90,23 @@ function OrdersPage({ setView }) {
   }
 
   function increaseQuantity(productId) {
+    const item = cartItems.find((cartItem) => cartItem.id === productId);
+
+    // Validar límite por producto al incrementar
+    if (item && item.quantity + 1 > MAX_UNIDADES_PRODUCTO) {
+      mostrarAviso(`Límite alcanzado: Solo puedes pedir un máximo de ${MAX_UNIDADES_PRODUCTO} unidades de este producto.`);
+      return;
+    }
+
+    // Validar límite total de items al incrementar
+    if (totalUnits + 1 > MAX_ITEMS_CARRITO) {
+      mostrarAviso(`El carrito está lleno. El límite máximo es de ${MAX_ITEMS_CARRITO} items en total.`);
+      return;
+    }
+
     setCartItems(
-      cartItems.map((item) =>
-        item.id === productId ? { ...item, quantity: item.quantity + 1 } : item
+      cartItems.map((cartItem) =>
+        cartItem.id === productId ? { ...cartItem, quantity: cartItem.quantity + 1 } : cartItem
       )
     );
   }
@@ -104,7 +143,7 @@ function OrdersPage({ setView }) {
     setIsPaymentOpen(false);
   }
 
-async function confirmOrder() {
+  async function confirmOrder() {
     if (cartItems.length === 0 || paymentMethod === "") return;
 
     // ID de método de pago según tu tabla 'metodos_pago' (1: Efectivo, 2: Tarjeta)
@@ -165,10 +204,14 @@ async function confirmOrder() {
         setCartItems([]);
         setPaymentMethod("");
       } else {
-        console.error("Error al registrar el pedido en el servidor.");
+        // Capturamos el mensaje de error devuelto por el backend (ej. falta de stock de ingredientes)
+        const errorData = await response.json();
+        setIsPaymentOpen(false); // Cerramos el modal de pago para que vea la alerta
+        mostrarAviso(errorData.error || "Error al registrar el pedido en el servidor.");
       }
     } catch (error) {
       console.error("Error de conexión con el backend:", error);
+      mostrarAviso("⚠️ Error de conexión con el servidor. Inténtalo de nuevo.");
     }
   }
 
@@ -178,6 +221,16 @@ async function confirmOrder() {
 
   return (
     <div className="orders-page">
+      {/* Ventana flotante / Modal de aviso intuitivo para límites o errores de stock */}
+      {alertaModal.visible && (
+        <div className="modal-aviso-flotante">
+          <div className="modal-contenido">
+            <span>{alertaModal.mensaje}</span>
+            <button onClick={() => setAlertaModal({ visible: false, mensaje: "" })}>&times;</button>
+          </div>
+        </div>
+      )}
+
       <OrderHeader totalUnits={totalUnits} setView={setView}/>
 
       <div className="orders-page__layout">

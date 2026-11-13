@@ -58,15 +58,68 @@ router.get('/vista', async (req, res) => {
   }
 });
 
-// POST /api/pedidos: Crear pedido desde OrdersPage
+// POST /api/pedidos: Crear pedido desde OrdersPage + descontar inventario
 router.post('/', async (req, res) => {
   const client = await pool.connect();
   try {
     const { mesa, nombre_cliente, metodo_pago_id, items } = req.body;
 
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: 'El carrito está vacío.' });
+    }
+
     await client.query('BEGIN');
 
-    // 1. Insertar en la tabla pedidos
+    // ── 1. Calcular cuánto de cada ingrediente necesita TODO el pedido ──
+    const necesarios = new Map(); // ingrediente_id -> cantidad total necesaria
+
+    for (const item of items) {
+      const { rows: receta } = await client.query(
+        `SELECT ingrediente_id, cantidad_necesaria
+         FROM public.producto_ingredientes
+         WHERE producto_id = $1`,
+        [item.producto_id]
+      );
+      for (const r of receta) {
+        const total = Number(r.cantidad_necesaria) * Number(item.cantidad);
+        necesarios.set(r.ingrediente_id, (necesarios.get(r.ingrediente_id) || 0) + total);
+      }
+    }
+
+    // ── 2. Bloquear esas filas y validar stock ──
+    // ORDER BY id evita deadlocks entre pedidos simultáneos
+    const ids = [...necesarios.keys()];
+    if (ids.length > 0) {
+      const { rows: stock } = await client.query(
+        `SELECT id, nombre, stock_actual
+         FROM public.ingredientes
+         WHERE id = ANY($1::int[])
+         ORDER BY id
+         FOR UPDATE`,
+        [ids]
+      );
+
+      for (const ing of stock) {
+        if (Number(ing.stock_actual) < necesarios.get(ing.id)) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({
+            error: `No hay suficiente disponibilidad para "${ing.nombre}". Solo quedan ${ing.stock_actual}.`,
+          });
+        }
+      }
+
+      // ── 3. Descontar ──
+      for (const [ingId, total] of necesarios) {
+        await client.query(
+          `UPDATE public.ingredientes
+           SET stock_actual = stock_actual - $1
+           WHERE id = $2`,
+          [total, ingId]
+        );
+      }
+    }
+
+    // ── 4. Insertar el pedido (igual que antes) ──
     const insertPedido = `
       INSERT INTO public.pedidos (mesa, nombre_cliente, metodo_pago_id, estado)
       VALUES ($1, $2, $3, 'pendiente')
@@ -75,23 +128,16 @@ router.post('/', async (req, res) => {
     const { rows: pedidoRows } = await client.query(insertPedido, [
       mesa || 'Mesa / Local',
       nombre_cliente || 'Cliente',
-      metodo_pago_id || 1, // 1: Efectivo / 2: Tarjeta según tu tabla metodos_pago
+      metodo_pago_id || 1,
     ]);
     const nuevoPedido = pedidoRows[0];
 
-    // 2. Insertar detalles en detalle_pedido
     for (const item of items) {
-      const insertDetalle = `
-        INSERT INTO public.detalle_pedido (pedido_id, producto_id, cantidad, precio_unitario, nota)
-        VALUES ($1, $2, $3, $4, $5);
-      `;
-      await client.query(insertDetalle, [
-        nuevoPedido.id,
-        item.producto_id,
-        item.cantidad,
-        item.precio_unitario,
-        item.nota || '',
-      ]);
+      await client.query(
+        `INSERT INTO public.detalle_pedido (pedido_id, producto_id, cantidad, precio_unitario, nota)
+         VALUES ($1, $2, $3, $4, $5);`,
+        [nuevoPedido.id, item.producto_id, item.cantidad, item.precio_unitario, item.nota || '']
+      );
     }
 
     await client.query('COMMIT');

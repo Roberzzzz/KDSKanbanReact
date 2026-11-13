@@ -22,6 +22,7 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', service: 'Sazón Express Backend API' });
 });
 
+
 app.listen(PORT, () => {
   console.log(` Servidor backend corriendo en el puerto ${PORT}`);
 });
