@@ -12,6 +12,7 @@ import PaymentModal from "./components/PaymentModal";
 import OrderConfirmation from "./components/OrderConfirmation";
 import { categories, products } from "./data/products";
 import { useKitchen } from "../../useKitchen";
+import { notifyNewOrder } from "../../orderSync";
 
 import "./styles/OrdersPage.css";
 
@@ -32,7 +33,7 @@ function OrdersPage({ setView }) {
   // Estado para la ventana flotante de avisos / errores de stock o límites
   const [alertaModal, setAlertaModal] = useState({ visible: false, mensaje: "" });
 
-  const { addOrder } = useKitchen();
+  const { syncOrders } = useKitchen();
 
   // Función auxiliar para mostrar avisos temporales
   const mostrarAviso = (mensaje) => {
@@ -171,26 +172,8 @@ function OrdersPage({ setView }) {
       if (response.ok) {
         const nuevoPedidoBD = await response.json();
 
-        // Estructuramos la orden para el estado local del KDS Kanban
-        const newKitchenOrder = {
-          id: String(nuevoPedidoBD.id),
-          numero: nuevoPedidoBD.numero,
-          mesa: "Mesa / Local",
-          createdAt: new Date(nuevoPedidoBD.creado_en).getTime(),
-          readyAt: null,
-          deliveredAt: null,
-          estado: "pendiente",
-          objetivoMin: 15,
-          items: cartItems.map((item) => ({
-            cantidad: item.quantity,
-            nombre: item.name,
-            nota: item.note || "",
-            minutos: 10,
-          })),
-        };
-
-        // Añadir a la vista local del KDS
-        addOrder(newKitchenOrder);
+        notifyNewOrder();
+        syncOrders();
 
         setConfirmedOrder({
           number: "SE-" + nuevoPedidoBD.numero,

@@ -1,4 +1,5 @@
 import { createContext, useContext, useCallback, useReducer, useEffect } from "react";
+import { ORDERS_CHANNEL } from "./orderSync";
 
 export const COLUMN_IDS = ["pendiente", "preparacion", "listo"];
 const MAX_UNDO = 30;
@@ -43,6 +44,21 @@ function reducer(state, action) {
         orders: { ...kept, ...newOrders },
         columns: newColumns,
       };
+    }
+
+    case "MERGE_ORDERS": {
+      const { ordersList } = action;
+      const fresh = ordersList.filter((o) => !state.orders[o.id]);
+      if (fresh.length === 0) return state;
+
+      const orders = { ...state.orders };
+      const columns = { ...state.columns };
+      fresh.forEach((o) => {
+        orders[o.id] = o;
+        const col = columns[o.estado] ? o.estado : "pendiente";
+        columns[col] = [...columns[col], o.id];
+      });
+      return { ...state, orders, columns };
     }
 
     case "move": {
@@ -248,6 +264,39 @@ export function KitchenProvider({ children }) {
     fetchOrders();
   }, [fetchOrders]);
 
+  const syncOrders = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/pedidos/vista`);
+      if (res.ok) {
+        const data = await res.json();
+        dispatch({ type: "MERGE_ORDERS", ordersList: data });
+      }
+    } catch (err) {
+      console.error("Error al sincronizar pedidos:", err);
+    }
+  }, []);
+
+  useEffect(() => {
+    const id = setInterval(syncOrders, 3000);
+
+    const onVisible = () => {
+      if (!document.hidden) syncOrders();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+
+    let channel;
+    if ("BroadcastChannel" in window) {
+      channel = new BroadcastChannel(ORDERS_CHANNEL);
+      channel.onmessage = syncOrders;
+    }
+
+    return () => {
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisible);
+      channel?.close();
+    };
+  }, [syncOrders]);
+
   // Mover pedido entre columnas (actualiza BD)
   const move = useCallback(async (id, to) => {
     dispatch({ type: "move", id, to, now: Date.now() });
@@ -309,7 +358,7 @@ export function KitchenProvider({ children }) {
   }, []);
 
   return (
-    <KitchenContext.Provider value={{ state, move, deliver, undo, markItemDone, addOrder, refreshOrders: fetchOrders }}>
+    <KitchenContext.Provider value={{ state, move, deliver, undo, markItemDone, addOrder, refreshOrders: fetchOrders, syncOrders }}>
       {children}
     </KitchenContext.Provider>
   );
