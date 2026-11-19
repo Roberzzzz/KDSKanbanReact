@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 import productosRouter from './routes/productos.js';
 import pedidosRouter from './routes/pedidos.js';
 import usuariosRouter from './routes/usuarios.js';
+import ingredientesRouter from './routes/ingredientes.js'; // <-- NUEVO
 
 dotenv.config();
 
@@ -17,11 +18,11 @@ app.use(express.json());
 app.use('/api/productos', productosRouter);
 app.use('/api/pedidos', pedidosRouter);
 app.use('/api/usuarios', usuariosRouter);
+app.use('/api/ingredientes', ingredientesRouter); // <-- NUEVO
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', service: 'Sazón Express Backend API' });
 });
-
 
 app.listen(PORT, () => {
   console.log(` Servidor backend corriendo en el puerto ${PORT}`);

@@ -19,6 +19,39 @@
   padding: 16px 24px 40px;
 }
 
+.admin-users__success {
+  margin: 0;
+  padding: 8px 12px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ok-ink);
+  background: var(--ok-bg);
+  border-radius: 8px;
+}
+
+.admin-users__restock {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.admin-users__restock input {
+  width: 82px;
+  min-height: 36px;
+  padding: 4px 8px;
+  font: inherit;
+  font-size: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.admin-users__restock input:focus {
+  outline: none;
+  border-color: var(--brand);
+}
+
 .admin-users *, .admin-users *::before, .admin-users *::after {
   box-sizing: border-box;
 }
@@ -62,7 +95,7 @@
 }
 
 .admin-users__layout {
-  display: grid;
+ 
   grid-template-columns: 360px minmax(0, 1fr);
   gap: 24px;
   max-width: 1200px;
