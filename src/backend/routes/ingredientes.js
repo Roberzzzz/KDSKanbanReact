@@ -17,13 +17,20 @@ router.get('/', async (req, res) => {
     res.status(500).json({ error: 'Error al obtener el inventario de ingredientes.' });
   }
 });
+const NOMBRE_INGREDIENTE_REGEX = /^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9 ]+$/;
 
-// Registrar un nuevo ingrediente en la base de datos
 router.post('/', async (req, res) => {
   const { nombre, unidad_medida, stock_actual } = req.body;
 
-  if (!nombre || !nombre.trim()) {
+  const nombreLimpio = typeof nombre === 'string' ? nombre.trim().replace(/\s+/g, ' ') : '';
+  if (!nombreLimpio) {
     return res.status(400).json({ error: 'El nombre del ingrediente es obligatorio.' });
+  }
+
+  if (!NOMBRE_INGREDIENTE_REGEX.test(nombreLimpio)) {
+    return res.status(400).json({
+      error: 'El nombre del ingrediente solo puede contener letras, números y espacios.',
+    });
   }
 
   const unidad = (unidad_medida && unidad_medida.trim()) || 'unidad';
@@ -36,12 +43,12 @@ router.post('/', async (req, res) => {
   try {
     const existe = await pool.query(
       'SELECT id FROM public.ingredientes WHERE LOWER(nombre) = LOWER($1)',
-      [nombre.trim()]
+      [nombreLimpio]
     );
 
     if (existe.rows.length > 0) {
       return res.status(409).json({
-        error: 'Ya existe un ingrediente con ese nombre. Usa la opción de reabastecer stock.',
+        error: 'Ya existe un ingrediente con ese nombre. Usa las opciones de sumar o ajustar stock.',
       });
     }
 
@@ -49,7 +56,7 @@ router.post('/', async (req, res) => {
       `INSERT INTO public.ingredientes (nombre, unidad_medida, stock_actual)
        VALUES ($1, $2, $3)
        RETURNING id, nombre, unidad_medida, stock_actual`,
-      [nombre.trim(), unidad, stockInicial]
+      [nombreLimpio, unidad, stockInicial]
     );
 
     res.status(201).json(result.rows[0]);
@@ -59,13 +66,13 @@ router.post('/', async (req, res) => {
   }
 });
 
-// Sumar stock a un ingrediente existente
+// Sumar stock a un ingrediente existente (reabastecimiento)
 router.patch('/:id/stock', async (req, res) => {
   const { id } = req.params;
   const cantidadAgregar = Number(req.body.cantidad);
 
   if (Number.isNaN(cantidadAgregar) || cantidadAgregar <= 0) {
-    return res.status(400).json({ error: 'Ingresa una cantidad válida mayor a 0.' });
+    return res.status(400).json({ error: 'Ingresa una cantidad válida mayor a 0 para sumar.' });
   }
 
   try {
@@ -83,8 +90,63 @@ router.patch('/:id/stock', async (req, res) => {
 
     res.json(result.rows[0]);
   } catch (err) {
-    console.error('Error al actualizar stock:', err);
-    res.status(500).json({ error: 'Error al actualizar el stock del ingrediente.' });
+    console.error('Error al sumar stock:', err);
+    res.status(500).json({ error: 'Error al sumar stock al ingrediente.' });
+  }
+});
+
+// Ajustar stock exacto a un ingrediente (conteo físico / merma / corrección)
+router.patch('/:id/ajustar', async (req, res) => {
+  const { id } = req.params;
+  const nuevoStock = Number(req.body.stock_actual);
+
+  if (Number.isNaN(nuevoStock) || nuevoStock < 0) {
+    return res.status(400).json({ error: 'Ingresa un stock real válido (0 o mayor).' });
+  }
+
+  try {
+    const result = await pool.query(
+      `UPDATE public.ingredientes
+       SET stock_actual = $1
+       WHERE id = $2
+       RETURNING id, nombre, unidad_medida, stock_actual`,
+      [nuevoStock, id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Ingrediente no encontrado.' });
+    }
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('Error al ajustar stock:', err);
+    res.status(500).json({ error: 'Error al ajustar el stock del ingrediente.' });
+  }
+});
+
+// Eliminar un ingrediente por ID
+router.delete('/:id', async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const result = await pool.query(
+      `DELETE FROM public.ingredientes
+       WHERE id = $1
+       RETURNING id, nombre`,
+      [id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Ingrediente no encontrado.' });
+    }
+
+    res.json({
+      message: `Ingrediente "${result.rows[0].nombre}" eliminado correctamente.`,
+      id: result.rows[0].id,
+    });
+  } catch (err) {
+    console.error('Error al eliminar ingrediente:', err);
+    res.status(500).json({ error: 'No se pudo eliminar el ingrediente.' });
   }
 });
 

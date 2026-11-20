@@ -1,8 +1,17 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import AdminInventory from "./AdminInventory";
 import "./AdminUsers.css";
+import "./KanbanDishes.css";
 
 const API_URL = "http://localhost:5000/api/usuarios";
+const MAX_CARACTERES = 20;
+
+// Solo letras (incluyendo acentos/ñ/ü), números y espacios; sin caracteres especiales
+const TEXTO_SIN_ESPECIALES_REGEX = /^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9 ]+$/;
+
+function limpiarSinEspeciales(valor) {
+  return valor.replace(/[^A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9 ]+/g, "").slice(0, MAX_CARACTERES);
+}
 
 export default function AdminUsers({ currentUser, setView, onLogout }) {
   const [activeTab, setActiveTab] = useState("usuarios");
@@ -12,12 +21,30 @@ export default function AdminUsers({ currentUser, setView, onLogout }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
+  // Popup flotante al crear o actualizar usuario
+  const [aviso, setAviso] = useState({ visible: false, mensaje: "", tipo: "ok" });
+  const avisoTimerRef = useRef(null);
+
   // Estado del formulario (Crear / Editar)
   const [editingId, setEditingId] = useState(null);
   const [nombreUsuario, setNombreUsuario] = useState("");
   const [nombreCompleto, setNombreCompleto] = useState("");
   const [contrasena, setContrasena] = useState("");
   const [rolId, setRolId] = useState("");
+
+  const mostrarAviso = (mensaje, tipo = "ok") => {
+    if (avisoTimerRef.current) clearTimeout(avisoTimerRef.current);
+    setAviso({ visible: true, mensaje, tipo });
+    avisoTimerRef.current = setTimeout(() => {
+      setAviso((prev) => ({ ...prev, visible: false }));
+    }, 4000);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (avisoTimerRef.current) clearTimeout(avisoTimerRef.current);
+    };
+  }, []);
 
   // Seguridad: si no es admin, bloquear acceso
   useEffect(() => {
@@ -63,19 +90,52 @@ export default function AdminUsers({ currentUser, setView, onLogout }) {
 
   const handleEditClick = (user) => {
     setEditingId(user.id);
-    setNombreUsuario(user.nombre_usuario);
-    setNombreCompleto(user.nombre_completo);
+    setNombreUsuario(limpiarSinEspeciales(user.nombre_usuario || ""));
+    setNombreCompleto(limpiarSinEspeciales(user.nombre_completo || ""));
     setRolId(String(user.rol_id));
     setContrasena(""); // Vacío para no sobreescribir a menos que escriba una nueva
     setError("");
+  };
+
+  const handleUsernameChange = (e) => {
+    setNombreUsuario(limpiarSinEspeciales(e.target.value));
+    if (error) setError("");
+  };
+
+  const handleFullnameChange = (e) => {
+    setNombreCompleto(limpiarSinEspeciales(e.target.value));
+    if (error) setError("");
+  };
+
+  const handlePasswordChange = (e) => {
+    setContrasena(e.target.value.slice(0, MAX_CARACTERES));
+    if (error) setError("");
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
 
-    if (!nombreUsuario.trim() || !nombreCompleto.trim() || !rolId) {
+    const usuarioLimpio = nombreUsuario.trim().replace(/\s+/g, " ");
+    const nombreLimpio = nombreCompleto.trim().replace(/\s+/g, " ");
+
+    if (!usuarioLimpio || !nombreLimpio || !rolId) {
       setError("Completa los campos obligatorios.");
+      return;
+    }
+
+    if (usuarioLimpio.length > MAX_CARACTERES || nombreLimpio.length > MAX_CARACTERES) {
+      setError(`El nombre de usuario y el nombre completo no pueden superar los ${MAX_CARACTERES} caracteres.`);
+      return;
+    }
+
+    if (
+      !TEXTO_SIN_ESPECIALES_REGEX.test(usuarioLimpio) ||
+      !TEXTO_SIN_ESPECIALES_REGEX.test(nombreLimpio)
+    ) {
+      setError(
+        "El nombre de usuario y el nombre completo solo pueden contener letras, números y espacios (sin caracteres especiales)."
+      );
       return;
     }
 
@@ -83,6 +143,13 @@ export default function AdminUsers({ currentUser, setView, onLogout }) {
       setError("Debes asignar una contraseña al crear un usuario.");
       return;
     }
+
+    if (contrasena.length > MAX_CARACTERES) {
+      setError(`La contraseña no puede superar los ${MAX_CARACTERES} caracteres.`);
+      return;
+    }
+
+    const eraEdicion = Boolean(editingId);
 
     try {
       const url = editingId ? `${API_URL}/${editingId}` : API_URL;
@@ -92,8 +159,8 @@ export default function AdminUsers({ currentUser, setView, onLogout }) {
         method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          nombre_usuario: nombreUsuario,
-          nombre_completo: nombreCompleto,
+          nombre_usuario: usuarioLimpio,
+          nombre_completo: nombreLimpio,
           contrasena,
           rol_id: Number(rolId),
         }),
@@ -101,15 +168,25 @@ export default function AdminUsers({ currentUser, setView, onLogout }) {
 
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || "Ocurrió un error al guardar.");
+        const msg = data.error || "Ocurrió un error al guardar.";
+        setError(msg);
+        mostrarAviso(msg, "error");
         return;
       }
 
       resetForm();
       fetchUsuarios();
+      mostrarAviso(
+        eraEdicion
+          ? `✅ Usuario "${usuarioLimpio}" actualizado correctamente.`
+          : `✅ Usuario "${usuarioLimpio}" añadido correctamente.`,
+        "ok"
+      );
     } catch (err) {
       console.error(err);
-      setError("Error de conexión con el servidor.");
+      const msg = "Error de conexión con el servidor.";
+      setError(msg);
+      mostrarAviso(msg, "error");
     }
   };
 
@@ -138,6 +215,41 @@ export default function AdminUsers({ currentUser, setView, onLogout }) {
 
   return (
     <div className="admin-users">
+      {aviso.visible && (
+        <div
+          className="modal-aviso-flotante"
+          role="status"
+          aria-live="polite"
+        >
+          <div
+            className="modal-contenido"
+            style={
+              aviso.tipo === "error"
+                ? {
+                    backgroundColor: "#fbe6d8",
+                    color: "#a83e12",
+                    borderColor: "#c8501e",
+                  }
+                : {
+                    backgroundColor: "#e6efd9",
+                    color: "#3b5f1f",
+                    borderColor: "#6a9a4a",
+                  }
+            }
+          >
+            <span>{aviso.mensaje}</span>
+            <button
+              type="button"
+              aria-label="Cerrar aviso"
+              onClick={() => setAviso((prev) => ({ ...prev, visible: false }))}
+              style={aviso.tipo === "error" ? { color: "#a83e12" } : { color: "#3b5f1f" }}
+            >
+              &times;
+            </button>
+          </div>
+        </div>
+      )}
+
       <header className="admin-users__top">
         <div className="admin-users__brand">
           <span className="admin-users__logo" aria-hidden="true">S</span>
@@ -197,24 +309,30 @@ export default function AdminUsers({ currentUser, setView, onLogout }) {
 
             <form className="admin-users__form" onSubmit={handleSubmit}>
               <div className="admin-users__field">
-                <label htmlFor="adm-username">Nombre de usuario</label>
+                <label htmlFor="adm-username">
+                  Nombre de usuario (máx. {MAX_CARACTERES})
+                </label>
                 <input
                   id="adm-username"
                   type="text"
+                  maxLength={MAX_CARACTERES}
                   value={nombreUsuario}
-                  onChange={(e) => setNombreUsuario(e.target.value)}
+                  onChange={handleUsernameChange}
                   placeholder="Ej. cocinero2"
                 />
               </div>
 
               <div className="admin-users__field">
-                <label htmlFor="adm-fullname">Nombre completo</label>
+                <label htmlFor="adm-fullname">
+                  Nombre completo (máx. {MAX_CARACTERES})
+                </label>
                 <input
                   id="adm-fullname"
                   type="text"
+                  maxLength={MAX_CARACTERES}
                   value={nombreCompleto}
-                  onChange={(e) => setNombreCompleto(e.target.value)}
-                  placeholder="Ej. Carlos Pérez"
+                  onChange={handleFullnameChange}
+                  placeholder="Ej. Carlos Perez"
                 />
               </div>
 
@@ -235,13 +353,16 @@ export default function AdminUsers({ currentUser, setView, onLogout }) {
 
               <div className="admin-users__field">
                 <label htmlFor="adm-pass">
-                  {editingId ? "Nueva contraseña (dejar vacío para mantener)" : "Contraseña"}
+                  {editingId
+                    ? `Nueva contraseña (máx. ${MAX_CARACTERES}, opcional)`
+                    : `Contraseña (máx. ${MAX_CARACTERES})`}
                 </label>
                 <input
                   id="adm-pass"
                   type="password"
+                  maxLength={MAX_CARACTERES}
                   value={contrasena}
-                  onChange={(e) => setContrasena(e.target.value)}
+                  onChange={handlePasswordChange}
                   placeholder={editingId ? "••••••••" : "Ingresa contraseña"}
                 />
               </div>
