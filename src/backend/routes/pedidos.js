@@ -3,6 +3,48 @@ import { pool } from '../db.js';
 
 const router = Router();
 
+const mapItem = (d) => ({
+  id: String(d.id),
+  cantidad: d.cantidad,
+  nombre: d.nombre,
+  nota: d.nota,
+  minutos: d.minutos,
+  startedAt: d.iniciado_en ? new Date(d.iniciado_en).getTime() : null,
+  doneAt: d.terminado_en ? new Date(d.terminado_en).getTime() : null,
+});
+
+const mapPedido = (p, items) => ({
+  id: String(p.id),
+  numero: p.numero,
+  mesa: p.mesa || 'Sin mesa',
+  estado: p.estado,
+  createdAt: new Date(p.creado_en).getTime(),
+  readyAt: p.listo_en ? new Date(p.listo_en).getTime() : null,
+  deliveredAt: p.entregado_en ? new Date(p.entregado_en).getTime() : null,
+  objetivoMin: p.objetivo_min || 15,
+  items,
+});
+
+async function adjuntarItems(pedidos) {
+  if (pedidos.length === 0) return [];
+  const { rows } = await pool.query(
+    `SELECT d.pedido_id, d.id, d.cantidad, pr.nombre, d.nota,
+            pr.tiempo_preparacion_min AS minutos,
+            d.iniciado_en, d.terminado_en
+     FROM public.detalle_pedido d
+     JOIN public.productos pr ON pr.id = d.producto_id
+     WHERE d.pedido_id = ANY($1::int[])
+     ORDER BY d.id;`,
+    [pedidos.map((p) => p.id)]
+  );
+  const porPedido = new Map();
+  for (const d of rows) {
+    if (!porPedido.has(d.pedido_id)) porPedido.set(d.pedido_id, []);
+    porPedido.get(d.pedido_id).push(mapItem(d));
+  }
+  return pedidos.map((p) => mapPedido(p, porPedido.get(p.id) || []));
+}
+
 // GET /api/pedidos/vista: Consulta la vista v_pedidos con ítems organizados para el Kanban
 router.get('/vista', async (req, res) => {
   try {
@@ -14,47 +56,29 @@ router.get('/vista', async (req, res) => {
       ORDER BY creado_en ASC;
     `;
     const { rows: pedidos } = await pool.query(queryPedidos);
-
-    // Adjuntar los ítems a cada pedido
-    const result = await Promise.all(
-      pedidos.map(async (p) => {
-        const itemsQuery = `
-          SELECT d.id, d.cantidad, pr.nombre, d.nota,
-                 pr.tiempo_preparacion_min AS minutos,
-                 d.iniciado_en, d.terminado_en
-          FROM public.detalle_pedido d
-          JOIN public.productos pr ON pr.id = d.producto_id
-          WHERE d.pedido_id = $1
-          ORDER BY d.id;
-        `;
-        const { rows: itemRows } = await pool.query(itemsQuery, [p.id]);
-        const items = itemRows.map((d) => ({
-          id: String(d.id),
-          cantidad: d.cantidad,
-          nombre: d.nombre,
-          nota: d.nota,
-          minutos: d.minutos,
-          startedAt: d.iniciado_en ? new Date(d.iniciado_en).getTime() : null,
-          doneAt: d.terminado_en ? new Date(d.terminado_en).getTime() : null,
-        }));
-        return {
-          id: String(p.id),
-          numero: p.numero,
-          mesa: p.mesa || 'Sin mesa',
-          estado: p.estado,
-          createdAt: new Date(p.creado_en).getTime(),
-          readyAt: p.listo_en ? new Date(p.listo_en).getTime() : null,
-          deliveredAt: p.entregado_en ? new Date(p.entregado_en).getTime() : null,
-          objetivoMin: p.objetivo_min || 15,
-          items,
-        };
-      })
-    );
-
-    res.json(result);
+    res.json(await adjuntarItems(pedidos));
   } catch (error) {
     console.error('Error al obtener vista de pedidos:', error);
     res.status(500).json({ error: 'Error al consultar el tablero de cocina' });
+  }
+});
+
+router.get('/historial', async (req, res) => {
+  try {
+    const { rows: pedidos } = await pool.query(
+      `SELECT id, numero, codigo_retiro, nombre_cliente, mesa, estado,
+              metodo_pago, creado_en, listo_en, entregado_en, unidades, total, objetivo_min
+       FROM public.v_pedidos
+       WHERE estado = 'entregado'
+         AND (entregado_en AT TIME ZONE COALESCE($1::text, current_setting('TimeZone')))::date
+           = (NOW() AT TIME ZONE COALESCE($1::text, current_setting('TimeZone')))::date
+       ORDER BY entregado_en DESC, id DESC;`,
+      [process.env.APP_TIMEZONE || null]
+    );
+    res.json(await adjuntarItems(pedidos));
+  } catch (error) {
+    console.error('Error al obtener historial de pedidos:', error);
+    res.status(500).json({ error: 'Error al consultar el historial de entregas' });
   }
 });
 

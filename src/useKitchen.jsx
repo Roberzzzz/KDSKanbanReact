@@ -1,4 +1,4 @@
-import { createContext, useContext, useCallback, useReducer, useEffect } from "react";
+import { createContext, useContext, useCallback, useReducer, useEffect, useRef } from "react";
 import { ORDERS_CHANNEL } from "./orderSync";
 
 export const COLUMN_IDS = ["pendiente", "preparacion", "listo"];
@@ -44,6 +44,18 @@ function reducer(state, action) {
         orders: { ...kept, ...newOrders },
         columns: newColumns,
       };
+    }
+
+    case "SET_HISTORY": {
+      const { ordersList } = action;
+      const orders = { ...state.orders };
+      const history = [];
+      ordersList.forEach((o) => {
+        if (findColumn(state.columns, o.id)) return;
+        orders[o.id] = o;
+        history.push(o.id);
+      });
+      return { ...state, orders, history };
     }
 
     case "MERGE_ORDERS": {
@@ -260,9 +272,37 @@ export function KitchenProvider({ children }) {
     }
   }, []);
 
+  const pendingMutations = useRef(0);
+
+  const fetchHistory = useCallback(async (force = false) => {
+    if (!force && pendingMutations.current > 0) return;
+    try {
+      const res = await fetch(`${API_BASE_URL}/pedidos/historial`);
+      if (res.ok) {
+        const data = await res.json();
+        dispatch({ type: "SET_HISTORY", ordersList: data });
+      }
+    } catch (err) {
+      console.error("Error al obtener el historial del backend:", err);
+    }
+  }, []);
+
   useEffect(() => {
     fetchOrders();
-  }, [fetchOrders]);
+    fetchHistory();
+  }, [fetchOrders, fetchHistory]);
+
+  useEffect(() => {
+    const id = setInterval(fetchHistory, 60000);
+    const onVisible = () => {
+      if (!document.hidden) fetchHistory();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [fetchHistory]);
 
   const syncOrders = useCallback(async () => {
     try {
@@ -314,6 +354,7 @@ export function KitchenProvider({ children }) {
   // Entregar pedido (actualiza BD a 'entregado')
   const deliver = useCallback(async (id) => {
     dispatch({ type: "deliver", id, now: Date.now() });
+    pendingMutations.current += 1;
     try {
       await fetch(`${API_BASE_URL}/pedidos/${id}/estado`, {
         method: "PATCH",
@@ -322,8 +363,11 @@ export function KitchenProvider({ children }) {
       });
     } catch (err) {
       console.error("Error al entregar pedido en la BD:", err);
+    } finally {
+      pendingMutations.current -= 1;
     }
-  }, []);
+    fetchHistory();
+  }, [fetchHistory]);
 
   // Marcar un plato como terminado (si es el último, la comanda pasa a "Listo")
   const markItemDone = useCallback(async (orderId, itemId) => {
@@ -340,6 +384,7 @@ export function KitchenProvider({ children }) {
     const last = state.undo[state.undo.length - 1];
     if (!last) return;
     dispatch({ type: "undo" });
+    pendingMutations.current += 1;
 
     try {
       if (last.kind === "item") {
@@ -350,15 +395,18 @@ export function KitchenProvider({ children }) {
       }
     } catch (err) {
       console.error("Error al deshacer en la BD:", err);
+    } finally {
+      pendingMutations.current -= 1;
     }
-  }, [state.undo]);
+    fetchHistory();
+  }, [state.undo, fetchHistory]);
 
   const addOrder = useCallback((order) => {
     dispatch({ type: "add", order });
   }, []);
 
   return (
-    <KitchenContext.Provider value={{ state, move, deliver, undo, markItemDone, addOrder, refreshOrders: fetchOrders, syncOrders }}>
+    <KitchenContext.Provider value={{ state, move, deliver, undo, markItemDone, addOrder, refreshOrders: fetchOrders, refreshHistory: fetchHistory, syncOrders }}>
       {children}
     </KitchenContext.Provider>
   );

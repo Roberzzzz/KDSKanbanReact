@@ -293,7 +293,7 @@ function undoLabel(entry, orders) {
 }
 
 function Board({ setView, currentUser, onLogout }) { // <--- Agrégalos aquí
-  const { state, move, deliver, undo, markItemDone } = useKitchen();
+  const { state, move, deliver, undo, markItemDone, refreshHistory } = useKitchen();
   const { orders, columns, history } = state;
 
   const [activeId, setActiveId] = useState(null);
@@ -416,7 +416,10 @@ function Board({ setView, currentUser, onLogout }) { // <--- Agrégalos aquí
             type="button"
             className="kds-btn"
             aria-haspopup="dialog"
-            onClick={() => setShowHistory(true)}
+            onClick={() => {
+              refreshHistory();
+              setShowHistory(true);
+            }}
           >
             Historial ({history.length})
           </button>
