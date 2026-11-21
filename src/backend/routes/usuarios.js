@@ -42,7 +42,7 @@ router.get('/', async (req, res) => {
       JOIN public.roles r ON r.id = u.rol_id
       ORDER BY u.id ASC;
     `;
-    const rolesQuery = `SELECT id, nombre FROM public.roles ORDER BY id ASC;`;
+    const rolesQuery = `SELECT id, nombre FROM public.roles where id = 1 or id = 3 ORDER BY id ;`;
 
     const [usersRes, rolesRes] = await Promise.all([
       pool.query(usersQuery),
