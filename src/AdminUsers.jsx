@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import AdminInventory from "./AdminInventory";
+import AdminProducts from "./AdminProducts";
 import "./AdminUsers.css";
 import "./KanbanDishes.css";
 
@@ -284,6 +285,17 @@ export default function AdminUsers({ currentUser, setView, onLogout }) {
           </button>
           <button
             type="button"
+            className={`admin-users__btn ${
+              activeTab === "productos"
+                ? "admin-users__btn--primary"
+                : "admin-users__btn--secondary"
+            }`}
+            onClick={() => setActiveTab("productos")}
+          >
+            Productos
+          </button>
+          <button
+            type="button"
             className="admin-users__btn admin-users__btn--secondary"
             onClick={() => setView("kanban")}
           >
@@ -301,6 +313,8 @@ export default function AdminUsers({ currentUser, setView, onLogout }) {
 
       {activeTab === "inventario" ? (
         <AdminInventory />
+      ) : activeTab === "productos" ? (
+        <AdminProducts />
       ) : (
         <main className="admin-users__layout">
           {/* Formulario Crear / Editar */}

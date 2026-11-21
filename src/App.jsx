@@ -19,7 +19,7 @@ function App() {
     <KitchenProvider>
       <>
         <div hidden={view !== "menu"}>
-          <OrdersPage setView={setView} />
+          <OrdersPage setView={setView} view={view} />
         </div>
         <div hidden={view !== "kanban"}>
           <KanbanBoard

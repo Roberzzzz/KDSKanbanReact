@@ -1,0 +1,163 @@
+/* AdminProducts.css — módulo de productos del administrador.
+   Reutiliza las clases admin-users__* y solo agrega lo propio de este módulo. */
+
+.admin-products__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.admin-products__toolbar .admin-users__field { min-width: 160px; }
+.admin-products__toolbar .admin-users__field--grow { flex: 1; min-width: 220px; }
+.admin-products__toolbar .admin-users__btn { white-space: nowrap; }
+
+.admin-products__thumb {
+  display: block;
+  width: 64px;
+  height: 48px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid var(--line, #eadcc8);
+  background: var(--tint, #fbe6d8);
+}
+
+.admin-products__name { font-weight: 800; }
+.admin-products__desc {
+  max-width: 280px;
+  margin-top: 2px;
+  font-size: 13px;
+  color: var(--muted, #6f6254);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-products__tag {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+}
+.admin-products__tag--warn { background: #f6dc8c; color: #5c3d00; }
+
+.admin-products__recipe-summary { font-size: 14px; }
+.admin-products__muted { color: var(--muted, #6f6254); font-size: 13px; }
+
+/* ---------- Ventana del formulario ---------- */
+
+.admin-products__modal {
+  --bg: #fff8ee;
+  --edge: #c9b08c;
+  --line: #eadcc8;
+  --ink: #2b1a10;
+  --muted: #6f6254;
+  --brand: #c8501e;
+  --brand-dark: #a83e12;
+  --tint: #fbe6d8;
+  --surface: #ffffff;
+  --ok-bg: #e6efd9;
+  --ok-ink: #3b5f1f;
+  max-width: 780px;
+  color: var(--ink);
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+}
+
+.admin-products__modal *, .admin-products__modal *::before, .admin-products__modal *::after {
+  box-sizing: border-box;
+}
+
+.admin-products__modal .kds-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-top: 16px;
+}
+
+.admin-products__grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+.admin-products__grid .is-full { grid-column: 1 / -1; }
+
+.admin-users__field textarea {
+  min-height: 84px;
+  padding: 8px 12px;
+  font: inherit;
+  border: 2px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--ink);
+  resize: vertical;
+}
+.admin-users__field textarea:focus { outline: none; border-color: var(--brand); }
+
+.admin-products__counter { align-self: flex-end; font-size: 12px; color: var(--muted); }
+
+.admin-products__check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 15px;
+  font-weight: 600;
+}
+.admin-products__check input { width: 20px; height: 20px; accent-color: var(--brand); }
+
+.admin-products__section-title { margin: 0; font-size: 16px; font-weight: 800; }
+
+/* Imagen */
+.admin-products__image-box { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; }
+.admin-products__preview {
+  width: 120px;
+  height: 90px;
+  object-fit: cover;
+  border-radius: 10px;
+  border: 2px solid var(--line);
+  background: var(--tint);
+}
+.admin-products__image-actions { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.admin-products__file { font-size: 14px; max-width: 260px; }
+
+/* Receta */
+.admin-products__recipe { display: flex; flex-direction: column; gap: 10px; }
+.admin-products__recipe-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 150px auto;
+  align-items: center;
+  gap: 8px;
+}
+.admin-products__recipe-row select,
+.admin-products__recipe-row input {
+  min-height: 40px;
+  padding: 6px 10px;
+  font: inherit;
+  font-size: 14px;
+  border: 2px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--ink);
+  min-width: 0;
+}
+.admin-products__recipe-row select:focus,
+.admin-products__recipe-row input:focus { outline: none; border-color: var(--brand); }
+.admin-products__qty { display: flex; align-items: center; gap: 6px; }
+.admin-products__qty span { font-size: 13px; color: var(--muted); white-space: nowrap; }
+.admin-products__notice {
+  margin: 0;
+  padding: 8px 12px;
+  font-size: 14px;
+  color: #5c3d00;
+  background: #f6dc8c;
+  border-radius: 8px;
+}
+
+.admin-products__form-actions { display: flex; justify-content: flex-end; gap: 10px; }
+.admin-products__form-actions .admin-users__btn--primary { flex: 0 0 auto; }
+
+@media (max-width: 680px) {
+  .admin-products__grid { grid-template-columns: 1fr; }
+  .admin-products__recipe-row { grid-template-columns: 1fr; }
+}

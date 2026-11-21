@@ -2,7 +2,7 @@
 // Aquí vive todo el estado de la página; los componentes hijos solo muestran
 // datos y avisan cuando el usuario hace algo.
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 
 import OrderHeader from "./components/OrderHeader";
 import CategoryFilter from "./components/CategoryFilter";
@@ -10,7 +10,7 @@ import ProductGrid from "./components/ProductGrid";
 import ShoppingCart from "./components/ShoppingCart";
 import PaymentModal from "./components/PaymentModal";
 import OrderConfirmation from "./components/OrderConfirmation";
-import { categories, products } from "./data/products";
+import { fetchMenu } from "./data/products";
 import { useKitchen } from "../../useKitchen";
 import { notifyNewOrder } from "../../orderSync";
 
@@ -19,7 +19,7 @@ import "./styles/OrdersPage.css";
 const MAX_UNIDADES_PRODUCTO = 15;
 const MAX_ITEMS_CARRITO = 50;
 
-function OrdersPage({ setView }) {
+function OrdersPage({ setView, view }) {
   // Categoría seleccionada en el filtro del menú
   const [selectedCategory, setSelectedCategory] = useState("Todos");
   // Productos del carrito: { id, name, price, quantity }
@@ -42,6 +42,63 @@ function OrdersPage({ setView }) {
       setAlertaModal({ visible: false, mensaje: "" });
     }, 4500);
   };
+
+  // ---------- Menú (desde la base de datos) ----------
+
+  // Productos activos que devuelve el backend y estado de la carga
+  const [products, setProducts] = useState([]);
+  const [menuLoading, setMenuLoading] = useState(true);
+  const [menuError, setMenuError] = useState("");
+  // Copia del carrito siempre actualizada, para revisarlo cuando se recarga el menú
+  const cartRef = useRef(cartItems);
+  cartRef.current = cartItems;
+
+  // Las categorías salen de los productos activos: una categoría sin productos activos no se muestra
+  const categories = ["Todos", ...new Set(products.map((product) => product.category))];
+
+  async function loadMenu({ avisar = true } = {}) {
+    try {
+      const menu = await fetchMenu();
+      setProducts(menu);
+      setMenuError("");
+
+      // Si la categoría elegida ya no existe en el menú, se vuelve a "Todos"
+      const nuevasCategorias = new Set(menu.map((product) => product.category));
+      setSelectedCategory((actual) =>
+        actual === "Todos" || nuevasCategorias.has(actual) ? actual : "Todos"
+      );
+
+      // Sincroniza el carrito: quita lo que ya no está activo y actualiza precios
+      const menuPorId = new Map(menu.map((product) => [product.id, product]));
+      const carritoActual = cartRef.current;
+      const quitados = carritoActual.filter((item) => !menuPorId.has(item.id));
+      if (quitados.length > 0 || carritoActual.some((item) => menuPorId.get(item.id)?.price !== item.price)) {
+        setCartItems(
+          carritoActual
+            .filter((item) => menuPorId.has(item.id))
+            .map((item) => ({ ...item, price: menuPorId.get(item.id).price }))
+        );
+      }
+      if (quitados.length > 0 && avisar) {
+        mostrarAviso(
+          `Se quitó del carrito porque ya no está disponible: ${quitados.map((item) => item.name).join(", ")}.`
+        );
+      }
+    } catch (error) {
+      console.error("Error al cargar el menú:", error);
+      setMenuError("No pudimos cargar el menú. Revisa tu conexión e inténtalo de nuevo.");
+    } finally {
+      setMenuLoading(false);
+    }
+  }
+
+  // El menú se consulta cada vez que se muestra esta vista, para reflejar los cambios del admin
+  useEffect(() => {
+    if (view === undefined || view === "menu") {
+      loadMenu();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view]);
 
   // Valores calculados a partir del estado
   const visibleProducts =
@@ -191,6 +248,8 @@ function OrdersPage({ setView }) {
         const errorData = await response.json();
         setIsPaymentOpen(false); // Cerramos el modal de pago para que vea la alerta
         mostrarAviso(errorData.error || "Error al registrar el pedido en el servidor.");
+        // Si el error fue por un producto que ya no está disponible, se actualiza el menú y el carrito
+        loadMenu({ avisar: false });
       }
     } catch (error) {
       console.error("Error de conexión con el backend:", error);
@@ -223,7 +282,18 @@ function OrdersPage({ setView }) {
             selectedCategory={selectedCategory}
             onSelectCategory={setSelectedCategory}
           />
-          <ProductGrid products={visibleProducts} onAddToCart={addToCart} />
+          {menuLoading ? (
+            <p className="orders-page__empty-products">Cargando el menú...</p>
+          ) : menuError ? (
+            <p className="orders-page__empty-products">
+              {menuError}{" "}
+              <button type="button" className="orders-page__add-button" onClick={() => loadMenu()}>
+                Reintentar
+              </button>
+            </p>
+          ) : (
+            <ProductGrid products={visibleProducts} onAddToCart={addToCart} />
+          )}
         </main>
 
         <ShoppingCart

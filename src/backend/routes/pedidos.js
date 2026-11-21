@@ -68,7 +68,42 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'El carrito está vacío.' });
     }
 
+    // Validación básica de cada ítem (ids y cantidades enteras positivas)
+    for (const item of items) {
+      const pid = Number(item?.producto_id);
+      const cant = Number(item?.cantidad);
+      if (!Number.isInteger(pid) || pid <= 0 || !Number.isInteger(cant) || cant <= 0 || cant > 99) {
+        return res.status(400).json({ error: 'El pedido contiene productos o cantidades no válidos.' });
+      }
+    }
+
     await client.query('BEGIN');
+
+    // ── 0. Verificar que los productos existan y estén activos; el precio sale de la BD ──
+    // FOR SHARE evita que el admin inactive/modifique un producto justo durante este pedido.
+    const idsProductos = [...new Set(items.map((i) => Number(i.producto_id)))];
+    const { rows: productosBD } = await client.query(
+      `SELECT id, nombre, precio, disponible
+       FROM public.productos
+       WHERE id = ANY($1::int[])
+       ORDER BY id
+       FOR SHARE`,
+      [idsProductos]
+    );
+    const preciosBD = new Map(productosBD.map((p) => [p.id, p.precio]));
+    for (const id of idsProductos) {
+      if (!preciosBD.has(id)) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'Uno de los productos del pedido ya no existe. Actualiza el menú.' });
+      }
+    }
+    const inactivo = productosBD.find((p) => !p.disponible);
+    if (inactivo) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({
+        error: `El producto "${inactivo.nombre}" ya no está disponible. Actualiza el menú y vuelve a intentarlo.`,
+      });
+    }
 
     // ── 1. Calcular cuánto de cada ingrediente necesita TODO el pedido ──
     const necesarios = new Map(); // ingrediente_id -> cantidad total necesaria
@@ -136,7 +171,7 @@ router.post('/', async (req, res) => {
       await client.query(
         `INSERT INTO public.detalle_pedido (pedido_id, producto_id, cantidad, precio_unitario, nota)
          VALUES ($1, $2, $3, $4, $5);`,
-        [nuevoPedido.id, item.producto_id, item.cantidad, item.precio_unitario, item.nota || '']
+        [nuevoPedido.id, item.producto_id, item.cantidad, preciosBD.get(Number(item.producto_id)), item.nota || '']
       );
     }
 
