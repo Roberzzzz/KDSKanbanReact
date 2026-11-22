@@ -3,6 +3,13 @@ import { pool } from '../db.js';
 
 const router = Router();
 
+const TRANSICIONES = {
+  pendiente: ['preparacion'],
+  preparacion: ['pendiente', 'listo'],
+  listo: ['preparacion', 'entregado'],
+  entregado: ['listo'],
+};
+
 const mapItem = (d) => ({
   id: String(d.id),
   cantidad: d.cantidad,
@@ -230,12 +237,36 @@ router.patch('/:id/estado', async (req, res) => {
 
     await client.query('BEGIN');
 
+    const { rows: actual } = await client.query(
+      'SELECT estado FROM public.pedidos WHERE id = $1 FOR UPDATE',
+      [id]
+    );
+
+    if (actual.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Pedido no encontrado' });
+    }
+
+    const estadoActual = actual[0].estado;
+
+    if (estadoActual === estado) {
+      await client.query('ROLLBACK');
+      return res.json({ success: true, sinCambios: true });
+    }
+
+    if (!TRANSICIONES[estadoActual]?.includes(estado)) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({
+        error: `Movimiento no permitido: de "${estadoActual}" a "${estado}"`,
+      });
+    }
+
     // Marcas de tiempo del pedido según el nuevo estado
     let updateQuery = 'UPDATE public.pedidos SET estado = $1';
     if (estado === 'listo') {
       updateQuery += ', listo_en = COALESCE(listo_en, NOW()), entregado_en = NULL';
     } else if (estado === 'entregado') {
-      updateQuery += ', entregado_en = NOW()';
+      updateQuery += ', listo_en = COALESCE(listo_en, NOW()), entregado_en = NOW()';
     } else {
       // Si la comanda sale de "listo", su cronómetro se reanuda
       updateQuery += ', listo_en = NULL, entregado_en = NULL';

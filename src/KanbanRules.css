@@ -1,0 +1,19 @@
+.kds-col.is-blocked {
+  background: transparent;
+  border: 2px dashed var(--edge, #c9b08c);
+}
+
+.kds-col.is-blocked .kds-ticket-wrap {
+  opacity: 0.45;
+}
+
+.kds-blocked-hint {
+  margin: 0;
+  padding: 10px 12px;
+  text-align: center;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--brand-dark, #a83e12);
+  background: var(--tint, #fbe6d8);
+  border-radius: 10px;
+}

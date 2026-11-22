@@ -2,6 +2,11 @@ import { createContext, useContext, useCallback, useReducer, useEffect, useRef }
 import { ORDERS_CHANNEL } from "./orderSync";
 
 export const COLUMN_IDS = ["pendiente", "preparacion", "listo"];
+
+export const canMove = (from, to) =>
+  COLUMN_IDS.includes(from) &&
+  COLUMN_IDS.includes(to) &&
+  Math.abs(COLUMN_IDS.indexOf(from) - COLUMN_IDS.indexOf(to)) === 1;
 const MAX_UNDO = 30;
 
 const API_BASE_URL = "http://localhost:5000/api";
@@ -59,24 +64,30 @@ function reducer(state, action) {
     }
 
     case "MERGE_ORDERS": {
-      const { ordersList } = action;
-      const fresh = ordersList.filter((o) => !state.orders[o.id]);
+      const { ordersList, returnFromHistory } = action;
+      const fresh = ordersList.filter(
+        (o) =>
+          !state.orders[o.id] ||
+          (returnFromHistory && state.history.includes(o.id) && !findColumn(state.columns, o.id))
+      );
       if (fresh.length === 0) return state;
 
       const orders = { ...state.orders };
       const columns = { ...state.columns };
+      let history = state.history;
       fresh.forEach((o) => {
         orders[o.id] = o;
         const col = columns[o.estado] ? o.estado : "pendiente";
         columns[col] = [...columns[col], o.id];
+        history = history.filter((x) => x !== o.id);
       });
-      return { ...state, orders, columns };
+      return { ...state, orders, columns, history };
     }
 
     case "move": {
       const { id, to, now } = action;
       const from = findColumn(state.columns, id);
-      if (!from || from === to) return state;
+      if (!from || from === to || !canMove(from, to)) return state;
 
       const order = state.orders[id];
       const fromIndex = state.columns[from].indexOf(id);
@@ -119,6 +130,24 @@ function reducer(state, action) {
         columns: { ...state.columns, listo: state.columns.listo.filter((x) => x !== id) },
         history: [id, ...state.history],
         undo: [...state.undo, { kind: "deliver", id, fromIndex }].slice(-MAX_UNDO),
+      };
+    }
+
+    case "reopen": {
+      const { id } = action;
+      const order = state.orders[id];
+      const historyIndex = state.history.indexOf(id);
+      if (!order || historyIndex === -1) return state;
+
+      return {
+        ...state,
+        orders: { ...state.orders, [id]: { ...order, estado: "listo", deliveredAt: null } },
+        columns: { ...state.columns, listo: [...state.columns.listo, id] },
+        history: state.history.filter((x) => x !== id),
+        undo: [
+          ...state.undo,
+          { kind: "reopen", id, historyIndex, prevDeliveredAt: order.deliveredAt },
+        ].slice(-MAX_UNDO),
       };
     }
 
@@ -214,6 +243,22 @@ function reducer(state, action) {
         return next;
       }
 
+      if (last.kind === "reopen") {
+        const { id, historyIndex, prevDeliveredAt } = last;
+        const history = [...state.history];
+        history.splice(Math.min(historyIndex, history.length), 0, id);
+        return {
+          ...state,
+          undo,
+          history,
+          orders: {
+            ...state.orders,
+            [id]: { ...state.orders[id], estado: "entregado", deliveredAt: prevDeliveredAt },
+          },
+          columns: { ...state.columns, listo: state.columns.listo.filter((x) => x !== id) },
+        };
+      }
+
       // kind === "deliver": la comanda vuelve a "Listo" en su posición original
       const { id, fromIndex } = last;
       const listo = [...state.columns.listo];
@@ -273,6 +318,7 @@ export function KitchenProvider({ children }) {
   }, []);
 
   const pendingMutations = useRef(0);
+  const mutationVersion = useRef(0);
 
   const fetchHistory = useCallback(async (force = false) => {
     if (!force && pendingMutations.current > 0) return;
@@ -305,11 +351,14 @@ export function KitchenProvider({ children }) {
   }, [fetchHistory]);
 
   const syncOrders = useCallback(async () => {
+    const version = mutationVersion.current;
     try {
       const res = await fetch(`${API_BASE_URL}/pedidos/vista`);
       if (res.ok) {
         const data = await res.json();
-        dispatch({ type: "MERGE_ORDERS", ordersList: data });
+        const returnFromHistory =
+          pendingMutations.current === 0 && mutationVersion.current === version;
+        dispatch({ type: "MERGE_ORDERS", ordersList: data, returnFromHistory });
       }
     } catch (err) {
       console.error("Error al sincronizar pedidos:", err);
@@ -338,36 +387,44 @@ export function KitchenProvider({ children }) {
   }, [syncOrders]);
 
   // Mover pedido entre columnas (actualiza BD)
-  const move = useCallback(async (id, to) => {
-    dispatch({ type: "move", id, to, now: Date.now() });
-    try {
-      await fetch(`${API_BASE_URL}/pedidos/${id}/estado`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ estado: to }),
-      });
-    } catch (err) {
-      console.error("Error al actualizar estado en la BD:", err);
-    }
-  }, []);
+  const move = useCallback(
+    async (id, to) => {
+      const from = findColumn(state.columns, id);
+      if (!from || !canMove(from, to)) return;
+      dispatch({ type: "move", id, to, now: Date.now() });
+      try {
+        const res = await fetch(`${API_BASE_URL}/pedidos/${id}/estado`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ estado: to }),
+        });
+        if (!res.ok) fetchOrders();
+      } catch (err) {
+        console.error("Error al actualizar estado en la BD:", err);
+      }
+    },
+    [state.columns, fetchOrders]
+  );
 
   // Entregar pedido (actualiza BD a 'entregado')
   const deliver = useCallback(async (id) => {
     dispatch({ type: "deliver", id, now: Date.now() });
     pendingMutations.current += 1;
+    mutationVersion.current += 1;
     try {
-      await fetch(`${API_BASE_URL}/pedidos/${id}/estado`, {
+      const res = await fetch(`${API_BASE_URL}/pedidos/${id}/estado`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ estado: "entregado" }),
       });
+      if (!res.ok) fetchOrders();
     } catch (err) {
       console.error("Error al entregar pedido en la BD:", err);
     } finally {
       pendingMutations.current -= 1;
     }
     fetchHistory();
-  }, [fetchHistory]);
+  }, [fetchHistory, fetchOrders]);
 
   // Marcar un plato como terminado (si es el último, la comanda pasa a "Listo")
   const markItemDone = useCallback(async (orderId, itemId) => {
@@ -385,28 +442,53 @@ export function KitchenProvider({ children }) {
     if (!last) return;
     dispatch({ type: "undo" });
     pendingMutations.current += 1;
+    mutationVersion.current += 1;
 
     try {
+      const respuestas = [];
       if (last.kind === "item") {
-        if (last.moved) await patchJson(`/pedidos/${last.id}/estado`, { estado: last.moved.from });
-        await patchJson(`/pedidos/${last.id}/items/${last.itemId}`, { terminado: false });
+        if (last.moved) {
+          respuestas.push(await patchJson(`/pedidos/${last.id}/estado`, { estado: last.moved.from }));
+        }
+        respuestas.push(await patchJson(`/pedidos/${last.id}/items/${last.itemId}`, { terminado: false }));
       } else {
-        await patchJson(`/pedidos/${last.id}/estado`, { estado: last.kind === "move" ? last.from : "listo" });
+        const destino = { move: last.from, reopen: "entregado", deliver: "listo" }[last.kind];
+        respuestas.push(await patchJson(`/pedidos/${last.id}/estado`, { estado: destino }));
       }
+      if (respuestas.some((r) => !r.ok)) fetchOrders();
     } catch (err) {
       console.error("Error al deshacer en la BD:", err);
     } finally {
       pendingMutations.current -= 1;
     }
     fetchHistory();
-  }, [state.undo, fetchHistory]);
+  }, [state.undo, fetchHistory, fetchOrders]);
+
+  const reopen = useCallback(
+    async (id) => {
+      if (!state.history.includes(id)) return;
+      dispatch({ type: "reopen", id });
+      pendingMutations.current += 1;
+      mutationVersion.current += 1;
+      try {
+        const res = await patchJson(`/pedidos/${id}/estado`, { estado: "listo" });
+        if (!res.ok) fetchOrders();
+      } catch (err) {
+        console.error("Error al reabrir el pedido en la BD:", err);
+      } finally {
+        pendingMutations.current -= 1;
+      }
+      fetchHistory();
+    },
+    [state.history, fetchOrders, fetchHistory]
+  );
 
   const addOrder = useCallback((order) => {
     dispatch({ type: "add", order });
   }, []);
 
   return (
-    <KitchenContext.Provider value={{ state, move, deliver, undo, markItemDone, addOrder, refreshOrders: fetchOrders, refreshHistory: fetchHistory, syncOrders }}>
+    <KitchenContext.Provider value={{ state, move, deliver, reopen, undo, markItemDone, addOrder, refreshOrders: fetchOrders, refreshHistory: fetchHistory, syncOrders }}>
       {children}
     </KitchenContext.Provider>
   );

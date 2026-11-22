@@ -1,6 +1,9 @@
 import { memo, useEffect, useRef, useState } from "react";
 import "./KanbanBoard.css";
 import "./KanbanDishes.css";
+import "./KanbanRules.css";
+import "./KanbanSort.css";
+import "./KanbanHistory.css";
 import {
   DndContext,
   DragOverlay,
@@ -13,7 +16,7 @@ import {
   useDroppable,
 } from "@dnd-kit/core";
 import { NowProvider, useNow } from "./NowProvider";
-import { useKitchen, COLUMN_IDS } from "./useKitchen";
+import { useKitchen, COLUMN_IDS, canMove } from "./useKitchen";
 import { formatClock, formatElapsed, timerStatus } from "./timeUtils";
 const COLUMNS = [
   {
@@ -37,6 +40,36 @@ const COLUMNS = [
 ];
 
 const COLUMN_TITLES = Object.fromEntries(COLUMNS.map((c) => [c.id, c.title]));
+
+const SORT_KEY = "kds-orden";
+
+function loadSort() {
+  let saved = null;
+  try {
+    saved = JSON.parse(localStorage.getItem(SORT_KEY));
+  } catch {
+    saved = null;
+  }
+  const sort = {};
+  COLUMN_IDS.forEach((c) => {
+    sort[c] = saved?.[c] === "desc" ? "desc" : "asc";
+  });
+  return sort;
+}
+
+function saveSort(sort) {
+  try {
+    localStorage.setItem(SORT_KEY, JSON.stringify(sort));
+  } catch {
+    return false;
+  }
+  return true;
+}
+
+const sortOrders = (list, dir) => {
+  const sign = dir === "desc" ? -1 : 1;
+  return [...list].sort((a, b) => sign * (a.createdAt - b.createdAt || a.numero - b.numero));
+};
 
 function Timer({ order }) {
   const now = useNow();
@@ -186,13 +219,22 @@ const DraggableTicket = memo(function DraggableTicket({ order, onDeliver, onItem
   );
 });
 
-function Column({ column, orders, onDeliver, onItemDone }) {
-  const { setNodeRef, isOver } = useDroppable({ id: column.id });
+function LateCount({ orders }) {
+  const now = useNow();
+  const late = orders.filter(
+    (o) => o.readyAt == null && timerStatus(now - o.createdAt, o.objetivoMin) === "late"
+  ).length;
+  if (late === 0) return null;
+  return <span className="kds-late-count">{late} con retraso</span>;
+}
+
+function Column({ column, orders, sort, blocked, onToggleSort, onDeliver, onItemDone }) {
+  const { setNodeRef, isOver } = useDroppable({ id: column.id, disabled: blocked });
 
   return (
     <section
       ref={setNodeRef}
-      className={`kds-col${isOver ? " is-over" : ""}`}
+      className={`kds-col${isOver ? " is-over" : ""}${blocked ? " is-blocked" : ""}`}
       style={{ "--accent": column.color }}
       aria-label={column.title}
     >
@@ -200,7 +242,21 @@ function Column({ column, orders, onDeliver, onItemDone }) {
         <h2>{column.title}</h2>
         <span className="kds-count">{orders.length}</span>
       </header>
+      <div className="kds-col-tools">
+        <LateCount orders={orders} />
+        <button
+          type="button"
+          className="kds-btn kds-sort"
+          onClick={onToggleSort}
+          aria-label={`Orden: ${sort === "asc" ? "más viejo primero" : "más nuevo primero"}. Cambiar orden`}
+        >
+          {sort === "asc" ? "Más viejo primero" : "Más nuevo primero"}
+        </button>
+      </div>
       <div className="kds-col-body">
+        {blocked && (
+          <p className="kds-blocked-hint">Primero debe pasar por {COLUMN_TITLES.preparacion}</p>
+        )}
         {orders.length === 0 ? (
           <p className="kds-empty">{column.empty}</p>
         ) : (
@@ -218,8 +274,9 @@ function Column({ column, orders, onDeliver, onItemDone }) {
   );
 }
 
-function HistoryModal({ ids, orders, onClose }) {
+function HistoryModal({ ids, orders, onClose, onReopen }) {
   const closeRef = useRef(null);
+  const [confirmId, setConfirmId] = useState(null);
 
   useEffect(() => {
     closeRef.current?.focus();
@@ -273,6 +330,39 @@ function HistoryModal({ ids, orders, onClose }) {
                       {aTiempo ? "A tiempo" : "Con retraso"}
                     </span>
                     <span className="kds-h-time">Entregada {formatClock(o.deliveredAt)}</span>
+                    <span className="kds-h-actions">
+                      {confirmId === id ? (
+                        <>
+                          <span className="kds-h-ask">¿Devolver a Listo?</span>
+                          <button
+                            type="button"
+                            className="kds-btn kds-h-confirm"
+                            onClick={() => {
+                              setConfirmId(null);
+                              onReopen(id);
+                            }}
+                          >
+                            Sí, reabrir
+                          </button>
+                          <button
+                            type="button"
+                            className="kds-btn kds-h-cancel"
+                            onClick={() => setConfirmId(null)}
+                          >
+                            Cancelar
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          type="button"
+                          className="kds-btn kds-h-reopen"
+                          aria-label={`Reabrir comanda #${o.numero}`}
+                          onClick={() => setConfirmId(id)}
+                        >
+                          Reabrir
+                        </button>
+                      )}
+                    </span>
                   </li>
                 );
               })}
@@ -289,11 +379,12 @@ function undoLabel(entry, orders) {
   const n = orders[entry.id]?.numero;
   if (entry.kind === "move") return `#${n} → ${COLUMN_TITLES[entry.to]}`;
   if (entry.kind === "item") return `plato de #${n}`;
+  if (entry.kind === "reopen") return `reapertura de #${n}`;
   return `entrega #${n}`;
 }
 
 function Board({ setView, currentUser, onLogout }) { // <--- Agrégalos aquí
-  const { state, move, deliver, undo, markItemDone, refreshHistory } = useKitchen();
+  const { state, move, deliver, reopen, undo, markItemDone, refreshHistory } = useKitchen();
   const { orders, columns, history } = state;
 
   const [activeId, setActiveId] = useState(null);
@@ -302,6 +393,14 @@ function Board({ setView, currentUser, onLogout }) { // <--- Agrégalos aquí
   // Estado para controlar los 3 clics en el logo
   const [clickCount, setClickCount] = useState(0);
   const [showLoginBtn, setShowLoginBtn] = useState(false);
+  const [sort, setSort] = useState(loadSort);
+
+  useEffect(() => {
+    saveSort(sort);
+  }, [sort]);
+
+  const toggleSort = (id) =>
+    setSort((s) => ({ ...s, [id]: s[id] === "asc" ? "desc" : "asc" }));
 
   const rootRef = useRef(null);
 
@@ -349,6 +448,8 @@ function Board({ setView, currentUser, onLogout }) { // <--- Agrégalos aquí
     setActiveId(null);
     if (over && COLUMN_IDS.includes(over.id)) move(active.id, over.id);
   };
+
+  const activeFrom = activeId ? COLUMN_IDS.find((c) => columns[c].includes(activeId)) : null;
 
   const lastUndo = state.undo[state.undo.length - 1];
   const total = COLUMN_IDS.reduce((n, c) => n + columns[c].length, 0);
@@ -437,7 +538,10 @@ function Board({ setView, currentUser, onLogout }) { // <--- Agrégalos aquí
             <Column
               key={col.id}
               column={col}
-              orders={columns[col.id].map((id) => orders[id])}
+              orders={sortOrders(columns[col.id].map((id) => orders[id]), sort[col.id])}
+              sort={sort[col.id]}
+              onToggleSort={() => toggleSort(col.id)}
+              blocked={Boolean(activeFrom) && col.id !== activeFrom && !canMove(activeFrom, col.id)}
               onDeliver={col.id === "listo" ? deliver : undefined}
               onItemDone={markItemDone}
             />
@@ -457,6 +561,7 @@ function Board({ setView, currentUser, onLogout }) { // <--- Agrégalos aquí
         <HistoryModal
           ids={history}
           orders={orders}
+          onReopen={reopen}
           onClose={() => setShowHistory(false)}
         />
       )}

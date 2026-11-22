@@ -1,0 +1,31 @@
+.kds-history-list li {
+  align-items: center;
+}
+
+.kds-h-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.kds-h-reopen,
+.kds-h-confirm,
+.kds-h-cancel {
+  min-height: 44px;
+  padding: 6px 14px;
+  font-size: 14px;
+}
+
+.kds-h-ask {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--brand-dark, #a83e12);
+}
+
+.kds-h-confirm {
+  color: #ffffff;
+  background: var(--brand, #c8501e);
+  border-color: var(--brand, #c8501e);
+}
