@@ -1,0 +1,171 @@
+.kds button {
+  touch-action: manipulation;
+}
+
+.kds-move {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+}
+.kds-move .kds-btn {
+  flex: 0 1 auto;
+  justify-content: center;
+  text-align: center;
+}
+.kds-move .kds-btn:only-child {
+  flex: 1 1 100%;
+}
+.kds-move .kds-move-next {
+  flex: 1 1 0;
+  width: auto;
+  margin-top: 0;
+}
+.kds-move + .kds-deliver {
+  margin-top: 8px;
+}
+
+@media (min-width: 701px) and (max-width: 800px) {
+  .kds-board {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .kds-col {
+    min-height: 420px;
+  }
+}
+
+@media (min-width: 701px) and (max-width: 1023px) {
+  .kds-board {
+    gap: 10px;
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+  .kds-col-head {
+    padding: 12px 12px 8px;
+  }
+  .kds-col-head h2 {
+    font-size: 16px;
+  }
+  .kds-col-tools {
+    flex-wrap: wrap;
+    padding: 0 8px 8px;
+  }
+  .kds-sort {
+    padding: 6px 10px;
+    font-size: 13px;
+  }
+  .kds-col-body {
+    gap: 10px;
+    padding: 0 8px 12px;
+  }
+  .kds-ticket {
+    padding: 10px;
+  }
+  .kds-ticket-head {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .kds-ticket-num {
+    font-size: 24px;
+  }
+  .kds-timer {
+    padding: 3px 10px;
+    font-size: 16px;
+  }
+  .kds-ticket-meta {
+    flex-wrap: wrap;
+    gap: 2px 8px;
+  }
+  .kds-qty {
+    min-width: 28px;
+    font-size: 18px;
+  }
+  .kds-item-name {
+    font-size: 16px;
+  }
+}
+
+@media (max-width: 700px) {
+  .kds {
+    min-height: 100vh;
+    min-height: 100dvh;
+  }
+
+  .kds-top {
+    gap: 10px 12px;
+    padding: 12px 16px;
+  }
+  .kds-logo {
+    width: 40px;
+    height: 40px;
+    font-size: 20px;
+  }
+  .kds-top h1 {
+    font-size: 18px;
+  }
+  .kds-brand p,
+  .kds-total {
+    font-size: 14px;
+  }
+  .kds-total {
+    width: 100%;
+  }
+  .kds-top > .kds-btn {
+    flex: 1 1 100%;
+    justify-content: center;
+  }
+
+  .kds-toolbar {
+    justify-content: stretch;
+  }
+  .kds-group {
+    width: 100%;
+  }
+  .kds-group .kds-btn {
+    flex: 1 1 140px;
+    flex-wrap: wrap;
+    justify-content: center;
+    text-align: center;
+  }
+
+  .kds-col-tools {
+    flex-wrap: wrap;
+  }
+  .kds-ticket-meta {
+    flex-wrap: wrap;
+  }
+
+  .kds-modal-backdrop {
+    padding: 0;
+    align-items: flex-end;
+  }
+  .kds-modal {
+    max-width: none;
+    max-height: 92vh;
+    max-height: 92dvh;
+    border-radius: 14px 14px 0 0;
+  }
+  .kds-modal-body {
+    padding: 4px 16px 20px;
+  }
+  .kds-history-list li {
+    gap: 6px 12px;
+  }
+  .kds-h-time,
+  .kds-h-actions {
+    width: 100%;
+    margin-left: 0;
+  }
+  .kds-h-actions .kds-btn {
+    flex: 1 1 120px;
+    justify-content: center;
+  }
+
+  .modal-aviso-flotante {
+    top: 12px;
+    left: 12px;
+    right: 12px;
+  }
+  .modal-contenido {
+    max-width: none;
+  }
+}

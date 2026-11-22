@@ -4,6 +4,7 @@ import "./KanbanDishes.css";
 import "./KanbanRules.css";
 import "./KanbanSort.css";
 import "./KanbanHistory.css";
+import "./KanbanMobile.css";
 import {
   DndContext,
   DragOverlay,
@@ -42,6 +43,30 @@ const COLUMNS = [
 const COLUMN_TITLES = Object.fromEntries(COLUMNS.map((c) => [c.id, c.title]));
 
 const SORT_KEY = "kds-orden";
+const MOBILE_QUERY = "(max-width: 700px)";
+
+function useIsMobile() {
+  const [mobile, setMobile] = useState(
+    () => typeof window !== "undefined" && Boolean(window.matchMedia) && window.matchMedia(MOBILE_QUERY).matches
+  );
+
+  useEffect(() => {
+    if (!window.matchMedia) return undefined;
+    const mq = window.matchMedia(MOBILE_QUERY);
+    const onChange = () => setMobile(mq.matches);
+    onChange();
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+
+  return mobile;
+}
+
+const neighbors = (estado) => {
+  const i = COLUMN_IDS.indexOf(estado);
+  if (i === -1) return { prev: null, next: null };
+  return { prev: COLUMN_IDS[i - 1] ?? null, next: COLUMN_IDS[i + 1] ?? null };
+};
 
 function loadSort() {
   let saved = null;
@@ -163,7 +188,38 @@ function Dish({ order, item, onItemDone }) {
   ) : null;
 }
 
-function Ticket({ order, onDeliver, onItemDone }) {
+function MoveActions({ order, onMove }) {
+  const { prev, next } = neighbors(order.estado);
+  if (!prev && !next) return null;
+  return (
+    <div className="kds-move">
+      {prev && (
+        <button
+          type="button"
+          className="kds-btn kds-move-btn"
+          onMouseDown={stop}
+          onTouchStart={stop}
+          onClick={() => onMove(order.id, prev)}
+        >
+          ← {COLUMN_TITLES[prev]}
+        </button>
+      )}
+      {next && (
+        <button
+          type="button"
+          className="kds-deliver kds-move-next"
+          onMouseDown={stop}
+          onTouchStart={stop}
+          onClick={() => onMove(order.id, next)}
+        >
+          {COLUMN_TITLES[next]} →
+        </button>
+      )}
+    </div>
+  );
+}
+
+function Ticket({ order, onDeliver, onItemDone, onMove }) {
   return (
     <div className="kds-ticket">
       <div className="kds-ticket-head">
@@ -186,6 +242,7 @@ function Ticket({ order, onDeliver, onItemDone }) {
           </li>
         ))}
       </ul>
+      {onMove && <MoveActions order={order} onMove={onMove} />}
       {onDeliver && (
         <button
           type="button"
@@ -201,7 +258,7 @@ function Ticket({ order, onDeliver, onItemDone }) {
   );
 }
 
-const DraggableTicket = memo(function DraggableTicket({ order, onDeliver, onItemDone }) {
+const DraggableTicket = memo(function DraggableTicket({ order, onDeliver, onItemDone, onMove }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: order.id,
   });
@@ -214,7 +271,7 @@ const DraggableTicket = memo(function DraggableTicket({ order, onDeliver, onItem
       {...attributes}
       role={onDeliver ? "group" : attributes.role}
     >
-      <Ticket order={order} onDeliver={onDeliver} onItemDone={onItemDone} />
+      <Ticket order={order} onDeliver={onDeliver} onItemDone={onItemDone} onMove={onMove} />
     </div>
   );
 });
@@ -228,7 +285,7 @@ function LateCount({ orders }) {
   return <span className="kds-late-count">{late} con retraso</span>;
 }
 
-function Column({ column, orders, sort, blocked, onToggleSort, onDeliver, onItemDone }) {
+function Column({ column, orders, sort, blocked, onToggleSort, onDeliver, onItemDone, onMove }) {
   const { setNodeRef, isOver } = useDroppable({ id: column.id, disabled: blocked });
 
   return (
@@ -266,6 +323,7 @@ function Column({ column, orders, sort, blocked, onToggleSort, onDeliver, onItem
               order={order}
               onDeliver={onDeliver}
               onItemDone={onItemDone}
+              onMove={onMove}
             />
           ))
         )}
@@ -394,6 +452,7 @@ function Board({ setView, currentUser, onLogout }) { // <--- Agrégalos aquí
   const [clickCount, setClickCount] = useState(0);
   const [showLoginBtn, setShowLoginBtn] = useState(false);
   const [sort, setSort] = useState(loadSort);
+  const isMobile = useIsMobile();
 
   useEffect(() => {
     saveSort(sort);
@@ -544,6 +603,7 @@ function Board({ setView, currentUser, onLogout }) { // <--- Agrégalos aquí
               blocked={Boolean(activeFrom) && col.id !== activeFrom && !canMove(activeFrom, col.id)}
               onDeliver={col.id === "listo" ? deliver : undefined}
               onItemDone={markItemDone}
+              onMove={isMobile ? move : undefined}
             />
           ))}
         </main>
