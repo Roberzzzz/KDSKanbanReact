@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import "./KanbanBoard.css";
 import "./KanbanDishes.css";
 import "./KanbanRules.css";
@@ -432,6 +432,53 @@ function HistoryModal({ ids, orders, onClose, onReopen }) {
   );
 }
 
+function ConfirmDialog({ title, message, confirmLabel, onConfirm, onCancel }) {
+  const cancelRef = useRef(null);
+
+  useEffect(() => {
+    cancelRef.current?.focus();
+    const onKey = (e) => {
+      if (e.key === "Escape") onCancel();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onCancel]);
+
+  return (
+    <div
+      className="kds-modal-backdrop"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onCancel();
+      }}
+    >
+      <section
+        className="kds-modal kds-confirm"
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="kds-confirm-title"
+        aria-describedby="kds-confirm-msg"
+      >
+        <header className="kds-modal-head">
+          <h2 id="kds-confirm-title">{title}</h2>
+        </header>
+        <div className="kds-modal-body">
+          <p id="kds-confirm-msg" className="kds-confirm-msg">
+            {message}
+          </p>
+          <div className="kds-confirm-actions">
+            <button ref={cancelRef} type="button" className="kds-btn" onClick={onCancel}>
+              Cancelar
+            </button>
+            <button type="button" className="kds-btn kds-h-confirm" onClick={onConfirm}>
+              {confirmLabel}
+            </button>
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function undoLabel(entry, orders) {
   if (!entry) return "";
   const n = orders[entry.id]?.numero;
@@ -447,6 +494,7 @@ function Board({ setView, currentUser, onLogout }) { // <--- Agrégalos aquí
 
   const [activeId, setActiveId] = useState(null);
   const [showHistory, setShowHistory] = useState(false);
+  const [confirmUndo, setConfirmUndo] = useState(false);
   
   // Estado para controlar los 3 clics en el logo
   const [clickCount, setClickCount] = useState(0);
@@ -485,23 +533,30 @@ function Board({ setView, currentUser, onLogout }) { // <--- Agrégalos aquí
     useSensor(KeyboardSensor)
   );
 
+  const requestUndo = useCallback(() => {
+    const last = state.undo[state.undo.length - 1];
+    if (last?.kind === "deliver") setConfirmUndo(true);
+    else undo();
+  }, [state.undo, undo]);
+
   useEffect(() => {
     const onKey = (e) => {
       const visible = rootRef.current && rootRef.current.offsetParent !== null;
       if (
         visible &&
         !showHistory &&
+        !confirmUndo &&
         (e.ctrlKey || e.metaKey) &&
         !e.shiftKey &&
         e.key.toLowerCase() === "z"
       ) {
         e.preventDefault();
-        undo();
+        requestUndo();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [undo, showHistory]);
+  }, [requestUndo, showHistory, confirmUndo]);
 
   const handleDragEnd = ({ active, over }) => {
     setActiveId(null);
@@ -568,7 +623,7 @@ function Board({ setView, currentUser, onLogout }) { // <--- Agrégalos aquí
 
       <div className="kds-toolbar">
         <div className="kds-group">
-          <button type="button" className="kds-btn" disabled={!lastUndo} onClick={undo}>
+          <button type="button" className="kds-btn" disabled={!lastUndo} onClick={requestUndo}>
             Deshacer
             {lastUndo && <span className="kds-btn-hint">{undoLabel(lastUndo, orders)}</span>}
           </button>
@@ -623,6 +678,19 @@ function Board({ setView, currentUser, onLogout }) { // <--- Agrégalos aquí
           orders={orders}
           onReopen={reopen}
           onClose={() => setShowHistory(false)}
+        />
+      )}
+
+      {confirmUndo && lastUndo && (
+        <ConfirmDialog
+          title={`¿Reabrir la comanda #${orders[lastUndo.id]?.numero ?? ""}?`}
+          message="Volverá a la columna Listo y dejará de figurar como entregada."
+          confirmLabel="Sí, reabrir"
+          onConfirm={() => {
+            setConfirmUndo(false);
+            undo();
+          }}
+          onCancel={() => setConfirmUndo(false)}
         />
       )}
     </div>

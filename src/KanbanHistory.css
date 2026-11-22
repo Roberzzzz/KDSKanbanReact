@@ -29,3 +29,26 @@
   background: var(--brand, #c8501e);
   border-color: var(--brand, #c8501e);
 }
+
+.kds-confirm {
+  max-width: 440px;
+}
+
+.kds-confirm-msg {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.4;
+}
+
+.kds-confirm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.kds-confirm-actions .kds-btn {
+  min-height: 44px;
+  padding: 6px 18px;
+}
