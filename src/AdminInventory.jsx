@@ -3,7 +3,6 @@ import "./KanbanDishes.css";
 
 const API_ING_URL = "http://localhost:5000/api/ingredientes";
 
-// Solo letras (con tildes/ñ/ü), números y espacios; sin caracteres especiales
 const NOMBRE_INGREDIENTE_REGEX = /^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9 ]+$/;
 
 function limpiarNombreIngrediente(valor) {
@@ -16,26 +15,23 @@ export default function AdminInventory() {
   const [error, setError] = useState("");
   const [creando, setCreando] = useState(false);
 
-  // Formulario de nuevo ingrediente
   const [nombre, setNombre] = useState("");
   const [unidadMedida, setUnidadMedida] = useState("unidad");
   const [stockActual, setStockActual] = useState("");
 
-  // Ventanilla emergente de confirmación / aviso
   const [aviso, setAviso] = useState({ visible: false, mensaje: "", tipo: "ok" });
   const timerRef = useRef(null);
 
-  // Sumar stock rápido por fila
   const [cantidadesSumar, setCantidadesSumar] = useState({});
 
-  // Ajustar stock real por fila
   const [ajustandoId, setAjustandoId] = useState(null);
   const [stockAjuste, setStockAjuste] = useState("");
   const [guardandoId, setGuardandoId] = useState(null);
 
-  // Advertencia antes de borrar ingrediente
-  const [ingredienteAEliminar, setIngredienteAEliminar] = useState(null);
-  const [eliminando, setEliminando] = useState(false);
+  const [ingredienteAInactivar, setIngredienteAInactivar] = useState(null);
+  const [recetasEnUso, setRecetasEnUso] = useState([]);
+  const [cargandoRecetas, setCargandoRecetas] = useState(false);
+  const [cambiandoEstado, setCambiandoEstado] = useState(false);
 
   const mostrarAviso = (mensaje, tipo = "ok") => {
     if (timerRef.current) clearTimeout(timerRef.current);
@@ -45,22 +41,42 @@ export default function AdminInventory() {
     }, 4000);
   };
 
+  const validarRangoValor = (valor, etiquetaCampo) => {
+    if (valor === "" || valor === "-") return true;
+    const num = Number(valor);
+    if (Number.isNaN(num)) return true;
+
+    if (num < 0) {
+      mostrarAviso(`⚠️ ${etiquetaCampo} no puede ser menor a 0.`, "error");
+      return false;
+    }
+
+    return true;
+  };
+
   useEffect(() => {
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
   }, []);
 
+  const cerrarModalInactivar = () => {
+    if (cambiandoEstado) return;
+    setIngredienteAInactivar(null);
+    setRecetasEnUso([]);
+    setCargandoRecetas(false);
+  };
+
   useEffect(() => {
-    if (!ingredienteAEliminar || eliminando) return;
+    if (!ingredienteAInactivar || cambiandoEstado) return;
     const onKeyDown = (e) => {
       if (e.key === "Escape") {
-        setIngredienteAEliminar(null);
+        cerrarModalInactivar();
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [ingredienteAEliminar, eliminando]);
+  }, [ingredienteAInactivar, cambiandoEstado]);
 
   const fetchIngredientes = async ({ silent = false } = {}) => {
     try {
@@ -107,7 +123,9 @@ export default function AdminInventory() {
 
     const stockNum = stockActual === "" ? 0 : Number(stockActual);
     if (Number.isNaN(stockNum) || stockNum < 0) {
-      setError("El stock inicial debe ser un número mayor o igual a 0.");
+      const msg = "El stock inicial no puede ser menor a 0.";
+      setError(msg);
+      mostrarAviso(`⚠️ ${msg}`, "error");
       return;
     }
 
@@ -152,11 +170,24 @@ export default function AdminInventory() {
 
   const handleAgregarStock = async (ingrediente) => {
     setError("");
-    const cantidad = Number(cantidadesSumar[ingrediente.id]);
+    const rawValor = cantidadesSumar[ingrediente.id];
+    const cantidad = Number(rawValor);
     const stockAnterior = Number(ingrediente.stock_actual);
 
-    if (!cantidad || cantidad <= 0) {
-      setError(`Ingresa una cantidad mayor a 0 para sumar a "${ingrediente.nombre}".`);
+    if (rawValor === undefined || rawValor === "" || Number.isNaN(cantidad) || cantidad <= 0) {
+      const msg =
+        cantidad < 0
+          ? `La cantidad a sumar para "${ingrediente.nombre}" no puede ser menor a 0.`
+          : `Ingresa una cantidad mayor a 0 para sumar a "${ingrediente.nombre}".`;
+      setError(msg);
+      mostrarAviso(`⚠️ ${msg}`, "error");
+      return;
+    }
+
+    if (!Number.isInteger(cantidad) || String(rawValor).includes(".") || String(rawValor).includes(",")) {
+      const msg = `No se permiten decimales al sumar stock a "${ingrediente.nombre}". Ingresa un número entero.`;
+      setError(msg);
+      mostrarAviso(`⚠️ ${msg}`, "error");
       return;
     }
 
@@ -211,7 +242,16 @@ export default function AdminInventory() {
     const valorAjustado = Number(stockAjuste);
 
     if (stockAjuste === "" || Number.isNaN(valorAjustado) || valorAjustado < 0) {
-      setError(`Ingresa un stock real válido (0 o mayor) para "${ingrediente.nombre}".`);
+      const msg = `El stock ajustado para "${ingrediente.nombre}" no puede ser menor a 0.`;
+      setError(msg);
+      mostrarAviso(`⚠️ ${msg}`, "error");
+      return;
+    }
+
+    if (!Number.isInteger(valorAjustado) || String(stockAjuste).includes(".") || String(stockAjuste).includes(",")) {
+      const msg = `No se permiten decimales al ajustar el stock de "${ingrediente.nombre}". Ingresa un número entero.`;
+      setError(msg);
+      mostrarAviso(`⚠️ ${msg}`, "error");
       return;
     }
 
@@ -250,44 +290,74 @@ export default function AdminInventory() {
     }
   };
 
-  const handleConfirmarBorrar = async () => {
-    if (!ingredienteAEliminar) return;
-
+  const abrirModalInactivar = async (ingrediente) => {
     setError("");
-    setEliminando(true);
+    setIngredienteAInactivar(ingrediente);
+    setRecetasEnUso([]);
+    setCargandoRecetas(true);
+
     try {
-      const res = await fetch(`${API_ING_URL}/${ingredienteAEliminar.id}`, {
-        method: "DELETE",
+      const res = await fetch(`${API_ING_URL}/${ingrediente.id}/recetas`);
+      if (res.ok) {
+        const data = await res.json();
+        setRecetasEnUso(Array.isArray(data.recetas) ? data.recetas : []);
+      } else {
+        setRecetasEnUso([]);
+      }
+    } catch (err) {
+      console.error(err);
+      setRecetasEnUso([]);
+    } finally {
+      setCargandoRecetas(false);
+    }
+  };
+
+  const cambiarEstadoIngrediente = async (ingrediente, activo) => {
+    setError("");
+    setCambiandoEstado(true);
+    try {
+      const res = await fetch(`${API_ING_URL}/${ingrediente.id}/estado`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ activo }),
       });
 
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const msg = data.error || "No se pudo borrar el ingrediente.";
+        if (Array.isArray(data.recetas) && data.recetas.length > 0) {
+          setRecetasEnUso(data.recetas);
+        }
+        const msg = data.error || "No se pudo cambiar el estado del ingrediente.";
         setError(msg);
         mostrarAviso(msg, "error");
-        setIngredienteAEliminar(null);
         return;
       }
 
-      if (ajustandoId === ingredienteAEliminar.id) {
+      if (!activo && ajustandoId === ingrediente.id) {
         cancelarAjuste();
       }
 
-      const nombreBorrado = ingredienteAEliminar.nombre;
-      setIngredienteAEliminar(null);
+      setIngredienteAInactivar(null);
+      setRecetasEnUso([]);
       await fetchIngredientes({ silent: true });
 
-      mostrarAviso(`🗑️ Ingrediente "${nombreBorrado}" eliminado del inventario.`, "ok");
+      mostrarAviso(
+        activo
+          ? `✅ Ingrediente "${ingrediente.nombre}" activado.`
+          : `⏸️ Ingrediente "${ingrediente.nombre}" inactivado.`,
+        "ok"
+      );
     } catch (err) {
       console.error(err);
-      const msg = "Error de conexión al borrar el ingrediente.";
+      const msg = "Error de conexión al cambiar el estado del ingrediente.";
       setError(msg);
       mostrarAviso(msg, "error");
-      setIngredienteAEliminar(null);
     } finally {
-      setEliminando(false);
+      setCambiandoEstado(false);
     }
   };
+
+  const estaActivo = (ing) => ing.activo !== false && ing.activo !== 0;
 
   return (
     <>
@@ -326,13 +396,13 @@ export default function AdminInventory() {
         </div>
       )}
 
-      {ingredienteAEliminar && (
+      {ingredienteAInactivar && (
         <div
           className="kds-modal-backdrop"
           style={{ zIndex: 1100 }}
           onMouseDown={(e) => {
-            if (!eliminando && e.target === e.currentTarget) {
-              setIngredienteAEliminar(null);
+            if (!cambiandoEstado && e.target === e.currentTarget) {
+              cerrarModalInactivar();
             }
           }}
         >
@@ -340,16 +410,16 @@ export default function AdminInventory() {
             className="kds-modal"
             role="alertdialog"
             aria-modal="true"
-            aria-labelledby="ing-delete-title"
-            style={{ maxWidth: 440 }}
+            aria-labelledby="ing-inactive-title"
+            style={{ maxWidth: 460 }}
           >
             <header className="kds-modal-head">
-              <h2 id="ing-delete-title">⚠️ Advertencia al borrar</h2>
+              <h2 id="ing-inactive-title">⚠️ Borrar ingrediente</h2>
               <button
                 type="button"
                 className="kds-btn kds-modal-close"
-                disabled={eliminando}
-                onClick={() => setIngredienteAEliminar(null)}
+                disabled={cambiandoEstado}
+                onClick={cerrarModalInactivar}
               >
                 Cerrar
               </button>
@@ -357,41 +427,74 @@ export default function AdminInventory() {
 
             <div className="kds-modal-body" style={{ display: "flex", flexDirection: "column", gap: 14, paddingTop: 14 }}>
               <p style={{ margin: 0, fontSize: 16 }}>
-                Vas a eliminar <strong>{ingredienteAEliminar.nombre}</strong> (stock actual:{" "}
+                Ingrediente: <strong>{ingredienteAInactivar.nombre}</strong> (stock actual:{" "}
                 <strong>
-                  {Number(ingredienteAEliminar.stock_actual)} {ingredienteAEliminar.unidad_medida}
+                  {Number(ingredienteAInactivar.stock_actual)} {ingredienteAInactivar.unidad_medida}
                 </strong>
                 ).
               </p>
-              <p style={{ margin: 0, fontSize: 14, color: "var(--muted)" }}>
-                Esta acción quitará el ingrediente de la base de datos y no se puede deshacer.
-              </p>
 
-              <div className="admin-users__actions" style={{ justifyContent: "flex-end" }}>
-                <button
-                  type="button"
-                  className="admin-users__btn admin-users__btn--secondary"
-                  disabled={eliminando}
-                  onClick={() => setIngredienteAEliminar(null)}
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="button"
-                  className="admin-users__btn admin-users__btn--danger"
-                  disabled={eliminando}
-                  onClick={handleConfirmarBorrar}
-                >
-                  {eliminando ? "Borrando..." : "Sí, borrar"}
-                </button>
-              </div>
+              {cargandoRecetas ? (
+                <p style={{ margin: 0, fontSize: 14, color: "var(--muted)" }}>
+                  Verificando si el ingrediente está en uso en alguna receta...
+                </p>
+              ) : recetasEnUso.length > 0 ? (
+                <>
+                  <p className="admin-users__error" style={{ margin: 0 }}>
+                    No se puede inactivar este ingrediente porque está siendo utilizado en las siguientes recetas. Elimínalo de ellas primero:
+                  </p>
+                  <ul style={{ margin: 0, paddingLeft: 20, display: "flex", flexDirection: "column", gap: 6 }}>
+                    {recetasEnUso.map((receta) => (
+                      <li key={receta.id}>
+                        <strong>{receta.nombre}</strong>{" "}
+                        <span style={{ fontSize: 13, color: "var(--muted)" }}>
+                          ({Number(receta.cantidad_necesaria)} {ingredienteAInactivar.unidad_medida}
+                          {!receta.disponible ? " · producto inactivo" : ""})
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="admin-users__actions" style={{ justifyContent: "flex-end" }}>
+                    <button
+                      type="button"
+                      className="admin-users__btn admin-users__btn--secondary"
+                      onClick={cerrarModalInactivar}
+                    >
+                      Entendido
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p style={{ margin: 0, fontSize: 14, color: "var(--muted)" }}>
+                    Dejará de estar disponible para nuevas operacione.
+                  </p>
+                  <div className="admin-users__actions" style={{ justifyContent: "flex-end" }}>
+                    <button
+                      type="button"
+                      className="admin-users__btn admin-users__btn--secondary"
+                      disabled={cambiandoEstado}
+                      onClick={cerrarModalInactivar}
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      className="admin-users__btn admin-users__btn--danger"
+                      disabled={cambiandoEstado}
+                      onClick={() => cambiarEstadoIngrediente(ingredienteAInactivar, false)}
+                    >
+                      {cambiandoEstado ? "Borrando..." : "Sí, Borrar"}
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           </section>
         </div>
       )}
 
       <main className="admin-users__layout">
-        {/* Menú / Formulario para añadir nuevos ingredientes */}
         <section className="admin-users__card">
           <h2>Nuevo Ingrediente</h2>
 
@@ -434,7 +537,11 @@ export default function AdminInventory() {
                 step="0.01"
                 value={stockActual}
                 disabled={creando}
-                onChange={(e) => setStockActual(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setStockActual(val);
+                  validarRangoValor(val, "El stock inicial");
+                }}
                 placeholder="Ej. 50"
               />
             </div>
@@ -453,7 +560,6 @@ export default function AdminInventory() {
           </form>
         </section>
 
-        {/* Tabla de Inventario Actual */}
         <section className="admin-users__card">
           <h2>Inventario de Ingredientes ({ingredientes.length})</h2>
 
@@ -474,13 +580,14 @@ export default function AdminInventory() {
                 </thead>
                 <tbody>
                   {ingredientes.map((ing) => {
+                    const activo = estaActivo(ing);
                     const stockNum = Number(ing.stock_actual);
                     const sinStock = stockNum <= 0;
                     const estaAjustando = ajustandoId === ing.id;
                     const estaGuardando = guardandoId === ing.id;
 
                     return (
-                      <tr key={ing.id}>
+                      <tr key={ing.id} className={activo ? "" : "is-blocked"}>
                         <td><strong>{ing.nombre}</strong></td>
                         <td>
                           <strong>{stockNum}</strong> {ing.unidad_medida}
@@ -488,10 +595,10 @@ export default function AdminInventory() {
                         <td>
                           <span
                             className={`admin-users__status ${
-                              sinStock ? "is-inactive" : "is-active"
+                              !activo ? "is-inactive" : sinStock ? "is-inactive" : "is-active"
                             }`}
                           >
-                            {sinStock ? "Sin stock" : "Disponible"}
+                            {!activo ? "Inactivo" : sinStock ? "Sin stock" : "Disponible"}
                           </span>
                         </td>
                         <td>
@@ -500,12 +607,31 @@ export default function AdminInventory() {
                               <input
                                 type="number"
                                 min="0"
-                                step="0.01"
+                                step="1"
                                 aria-label={`Nuevo stock real para ${ing.nombre}`}
                                 value={stockAjuste}
-                                disabled={estaGuardando || eliminando}
-                                onChange={(e) => setStockAjuste(e.target.value)}
+                                disabled={estaGuardando || cambiandoEstado}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  if (val.includes(".") || val.includes(",")) {
+                                    mostrarAviso(
+                                      `⚠️ No se permiten decimales al ajustar el stock de ${ing.nombre}.`,
+                                      "error"
+                                    );
+                                    return;
+                                  }
+                                  setStockAjuste(val);
+                                  validarRangoValor(val, `El stock ajustado para ${ing.nombre}`);
+                                }}
                                 onKeyDown={(e) => {
+                                  if (e.key === "." || e.key === ",") {
+                                    e.preventDefault();
+                                    mostrarAviso(
+                                      `⚠️ No se permiten decimales al ajustar el stock de ${ing.nombre}.`,
+                                      "error"
+                                    );
+                                    return;
+                                  }
                                   if (e.key === "Enter") handleGuardarAjuste(ing);
                                   if (e.key === "Escape") cancelarAjuste();
                                 }}
@@ -513,7 +639,7 @@ export default function AdminInventory() {
                               <button
                                 type="button"
                                 className="admin-users__small-btn is-ok"
-                                disabled={estaGuardando || eliminando}
+                                disabled={estaGuardando || cambiandoEstado}
                                 onClick={() => handleGuardarAjuste(ing)}
                               >
                                 {estaGuardando ? "Guardando..." : "Guardar"}
@@ -521,7 +647,7 @@ export default function AdminInventory() {
                               <button
                                 type="button"
                                 className="admin-users__small-btn"
-                                disabled={estaGuardando || eliminando}
+                                disabled={estaGuardando || cambiandoEstado}
                                 onClick={cancelarAjuste}
                               >
                                 Cancelar
@@ -531,26 +657,43 @@ export default function AdminInventory() {
                             <div className="admin-users__restock">
                               <input
                                 type="number"
-                                min="0.01"
-                                step="0.01"
+                                min="1"
+                                step="1"
                                 placeholder="+ Cant."
                                 aria-label={`Cantidad a sumar para ${ing.nombre}`}
                                 value={cantidadesSumar[ing.id] ?? ""}
-                                disabled={estaGuardando || eliminando}
-                                onChange={(e) =>
+                                disabled={estaGuardando || cambiandoEstado || !activo}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  if (val.includes(".") || val.includes(",")) {
+                                    mostrarAviso(
+                                      `⚠️ No se permiten decimales al sumar stock a ${ing.nombre}.`,
+                                      "error"
+                                    );
+                                    return;
+                                  }
                                   setCantidadesSumar((prev) => ({
                                     ...prev,
-                                    [ing.id]: e.target.value,
-                                  }))
-                                }
+                                    [ing.id]: val,
+                                  }));
+                                  validarRangoValor(val, `La cantidad a sumar para ${ing.nombre}`);
+                                }}
                                 onKeyDown={(e) => {
+                                  if (e.key === "." || e.key === ",") {
+                                    e.preventDefault();
+                                    mostrarAviso(
+                                      `⚠️ No se permiten decimales al sumar stock a ${ing.nombre}.`,
+                                      "error"
+                                    );
+                                    return;
+                                  }
                                   if (e.key === "Enter") handleAgregarStock(ing);
                                 }}
                               />
                               <button
                                 type="button"
                                 className="admin-users__small-btn is-ok"
-                                disabled={estaGuardando || eliminando}
+                                disabled={estaGuardando || cambiandoEstado || !activo}
                                 onClick={() => handleAgregarStock(ing)}
                               >
                                 {estaGuardando ? "Sumando..." : "Sumar"}
@@ -558,22 +701,30 @@ export default function AdminInventory() {
                               <button
                                 type="button"
                                 className="admin-users__small-btn"
-                                disabled={estaGuardando || eliminando}
+                                disabled={estaGuardando || cambiandoEstado || !activo}
                                 onClick={() => abrirAjuste(ing)}
                               >
                                 Ajustar
                               </button>
-                              <button
-                                type="button"
-                                className="admin-users__small-btn is-warn"
-                                disabled={estaGuardando || eliminando}
-                                onClick={() => {
-                                  setError("");
-                                  setIngredienteAEliminar(ing);
-                                }}
-                              >
-                                Borrar
-                              </button>
+                              {activo ? (
+                                <button
+                                  type="button"
+                                  className="admin-users__small-btn is-warn"
+                                  disabled={estaGuardando || cambiandoEstado}
+                                  onClick={() => abrirModalInactivar(ing)}
+                                >
+                                  Borrar
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  className="admin-users__small-btn is-ok"
+                                  disabled={estaGuardando || cambiandoEstado}
+                                  onClick={() => cambiarEstadoIngrediente(ing, true)}
+                                >
+                                  {cambiandoEstado ? "Activando..." : "Activar"}
+                                </button>
+                              )}
                             </div>
                           )}
                         </td>

@@ -3,7 +3,67 @@ import { pool } from '../db.js';
 
 const router = express.Router();
 
-// Obtener todos los ingredientes ordenados alfabéticamente
+const NOMBRE_INGREDIENTE_REGEX = /^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9 ]+$/;
+
+async function obtenerRecetasPorIngrediente(clientOrPool, ingredienteId) {
+  const { rows } = await clientOrPool.query(
+    `SELECT DISTINCT p.id, p.nombre, p.disponible, pi.cantidad_necesaria
+     FROM public.producto_ingredientes pi
+     JOIN public.productos p ON p.id = pi.producto_id
+     WHERE pi.ingrediente_id = $1
+     ORDER BY p.nombre ASC`,
+    [ingredienteId]
+  );
+  return rows;
+}
+
+async function eliminarIngredientePorId(req, res) {
+  const id = Number(req.params.id);
+
+  if (!Number.isInteger(id) || id <= 0) {
+    return res.status(400).json({ error: 'Identificador de ingrediente no válido.' });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const actual = await client.query(
+      'SELECT id, nombre FROM public.ingredientes WHERE id = $1 FOR UPDATE',
+      [id]
+    );
+    if (actual.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Ingrediente no encontrado.' });
+    }
+
+    const recetas = await obtenerRecetasPorIngrediente(client, id);
+    if (recetas.length > 0) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({
+        error: `No se puede eliminar "${actual.rows[0].nombre}" porque está siendo utilizado en recetas.`,
+        recetas,
+      });
+    }
+
+    const deleted = await client.query(
+      `DELETE FROM public.ingredientes
+       WHERE id = $1
+       RETURNING id, nombre, unidad_medida, stock_actual`,
+      [id]
+    );
+
+    await client.query('COMMIT');
+    res.json({ eliminado: true, ingrediente: deleted.rows[0] });
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    console.error('Error al eliminar ingrediente:', err);
+    res.status(500).json({ error: 'No se pudo eliminar el ingrediente.' });
+  } finally {
+    client.release();
+  }
+}
+
 router.get('/', async (req, res) => {
   try {
     const result = await pool.query(
@@ -17,7 +77,29 @@ router.get('/', async (req, res) => {
     res.status(500).json({ error: 'Error al obtener el inventario de ingredientes.' });
   }
 });
-const NOMBRE_INGREDIENTE_REGEX = /^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9 ]+$/;
+
+router.get('/:id/recetas', async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) {
+    return res.status(400).json({ error: 'Identificador de ingrediente no válido.' });
+  }
+
+  try {
+    const ing = await pool.query(
+      'SELECT id, nombre FROM public.ingredientes WHERE id = $1',
+      [id]
+    );
+    if (ing.rows.length === 0) {
+      return res.status(404).json({ error: 'Ingrediente no encontrado.' });
+    }
+
+    const recetas = await obtenerRecetasPorIngrediente(pool, id);
+    res.json({ recetas });
+  } catch (err) {
+    console.error('Error al consultar recetas del ingrediente:', err);
+    res.status(500).json({ error: 'No se pudieron consultar las recetas del ingrediente.' });
+  }
+});
 
 router.post('/', async (req, res) => {
   const { nombre, unidad_medida, stock_actual } = req.body;
@@ -66,9 +148,12 @@ router.post('/', async (req, res) => {
   }
 });
 
-// Sumar stock a un ingrediente existente (reabastecimiento)
 router.patch('/:id/stock', async (req, res) => {
-  const { id } = req.params;
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) {
+    return res.status(400).json({ error: 'Identificador de ingrediente no válido.' });
+  }
+
   const cantidadAgregar = Number(req.body.cantidad);
 
   if (Number.isNaN(cantidadAgregar) || cantidadAgregar <= 0) {
@@ -95,9 +180,12 @@ router.patch('/:id/stock', async (req, res) => {
   }
 });
 
-// Ajustar stock exacto a un ingrediente (conteo físico / merma / corrección)
 router.patch('/:id/ajustar', async (req, res) => {
-  const { id } = req.params;
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) {
+    return res.status(400).json({ error: 'Identificador de ingrediente no válido.' });
+  }
+
   const nuevoStock = Number(req.body.stock_actual);
 
   if (Number.isNaN(nuevoStock) || nuevoStock < 0) {
@@ -124,30 +212,7 @@ router.patch('/:id/ajustar', async (req, res) => {
   }
 });
 
-// Eliminar un ingrediente por ID
-router.delete('/:id', async (req, res) => {
-  const { id } = req.params;
-
-  try {
-    const result = await pool.query(
-      `DELETE FROM public.ingredientes
-       WHERE id = $1
-       RETURNING id, nombre`,
-      [id]
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Ingrediente no encontrado.' });
-    }
-
-    res.json({
-      message: `Ingrediente "${result.rows[0].nombre}" eliminado correctamente.`,
-      id: result.rows[0].id,
-    });
-  } catch (err) {
-    console.error('Error al eliminar ingrediente:', err);
-    res.status(500).json({ error: 'No se pudo eliminar el ingrediente.' });
-  }
-});
+router.delete('/:id', eliminarIngredientePorId);
+router.patch('/:id/estado', eliminarIngredientePorId);
 
 export default router;
