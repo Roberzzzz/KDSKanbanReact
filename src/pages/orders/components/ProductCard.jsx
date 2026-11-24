@@ -3,7 +3,7 @@
 import { formatPrice } from "../data/products";
 import "../styles/ProductCard.css";
 
-function ProductCard({ product, onAddToCart }) {
+function ProductCard({ product, onAddToCart, available = true }) {
   return (
     <article className="orders-page__product-card">
       <img
@@ -27,11 +27,18 @@ function ProductCard({ product, onAddToCart }) {
             type="button"
             className="orders-page__add-button"
             aria-label={`Agregar ${product.name} al carrito`}
-            onClick={() => onAddToCart(product)}
+            disabled={!available}
+            style={available ? undefined : { opacity: 0.5, cursor: "not-allowed" }}
+            onClick={() => available && onAddToCart(product)}
           >
             + Agregar
           </button>
         </div>
+        {!available && (
+          <p className="orders-page__product-unavailable" style={{ color: "#c0392b", fontSize: "0.8rem", margin: "6px 0 0" }}>
+            ¡Lo sentimos! Este producto no está disponible en estos momentos.
+          </p>
+        )}
       </div>
     </article>
   );

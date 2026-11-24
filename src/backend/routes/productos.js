@@ -309,7 +309,16 @@ router.get('/', async (req, res) => {
     const query = `
       SELECT p.id, p.nombre, p.descripcion, p.precio, 
              p.tiempo_preparacion_min, p.imagen, p.disponible, 
-             c.nombre AS categoria
+             c.nombre AS categoria,
+             COALESCE((
+               SELECT json_agg(json_build_object(
+                        'ingrediente_id', pi.ingrediente_id,
+                        'cantidad', pi.cantidad_necesaria,
+                        'stock', i.stock_actual))
+               FROM public.producto_ingredientes pi
+               JOIN public.ingredientes i ON i.id = pi.ingrediente_id
+               WHERE pi.producto_id = p.id
+             ), '[]'::json) AS receta
       FROM public.productos p
       JOIN public.categorias c ON c.id = p.categoria_id
       WHERE p.disponible = true

@@ -8,6 +8,7 @@ function ShoppingCart({
   subtotal,
   total,
   onIncrease,
+  canIncrease = () => true,
   onDecrease,
   onRemove,
   onContinue,
@@ -60,6 +61,8 @@ function ShoppingCart({
                     type="button"
                     className="orders-page__quantity-button"
                     aria-label={`Aumentar cantidad de ${item.name}`}
+                    disabled={!canIncrease(item.id)}
+                    style={canIncrease(item.id) ? undefined : { opacity: 0.5, cursor: "not-allowed" }}
                     onClick={() => onIncrease(item.id)}
                   >
                     +

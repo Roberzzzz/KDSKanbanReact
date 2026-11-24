@@ -18,6 +18,7 @@ import "./styles/OrdersPage.css";
 
 const MAX_UNIDADES_PRODUCTO = 15;
 const MAX_ITEMS_CARRITO = 50;
+const MENSAJE_NO_DISPONIBLE = "¡Lo sentimos! Este producto no está disponible en estos momentos.";
 
 function OrdersPage({ setView, view }) {
   // Categoría seleccionada en el filtro del menú
@@ -113,9 +114,29 @@ function OrdersPage({ setView, view }) {
   );
   const total = subtotal; 
 
+  // Ingredientes consumidos virtualmente por lo que ya está en el carrito
+  const consumoCarrito = new Map(); // ingredienteId -> cantidad
+  for (const item of cartItems) {
+    const prod = products.find((p) => p.id === item.id);
+    for (const r of prod?.receta || []) {
+      consumoCarrito.set(r.ingredienteId, (consumoCarrito.get(r.ingredienteId) || 0) + r.cantidad * item.quantity);
+    }
+  }
+
+  // true si, descontando lo del carrito, alcanza para preparar una unidad más del producto
+  function canPrepareOneMore(product) {
+    return (product.receta || []).every(
+      (r) => r.stock - (consumoCarrito.get(r.ingredienteId) || 0) >= r.cantidad - 1e-9
+    );
+  }
+
   // ---------- Carrito y Validaciones ----------
 
   function addToCart(product) {
+    if (!canPrepareOneMore(product)) {
+      mostrarAviso(MENSAJE_NO_DISPONIBLE);
+      return;
+    }
     const existingItem = cartItems.find((item) => item.id === product.id);
     const cantidadActual = existingItem ? existingItem.quantity : 0;
 
@@ -149,6 +170,12 @@ function OrdersPage({ setView, view }) {
 
   function increaseQuantity(productId) {
     const item = cartItems.find((cartItem) => cartItem.id === productId);
+
+    const prodInc = products.find((p) => p.id === productId);
+    if (prodInc && !canPrepareOneMore(prodInc)) {
+      mostrarAviso(MENSAJE_NO_DISPONIBLE);
+      return;
+    }
 
     // Validar límite por producto al incrementar
     if (item && item.quantity + 1 > MAX_UNIDADES_PRODUCTO) {
@@ -292,7 +319,7 @@ function OrdersPage({ setView, view }) {
               </button>
             </p>
           ) : (
-            <ProductGrid products={visibleProducts} onAddToCart={addToCart} />
+            <ProductGrid products={visibleProducts} onAddToCart={addToCart} canPrepare={canPrepareOneMore} />
           )}
         </main>
 
@@ -301,6 +328,7 @@ function OrdersPage({ setView, view }) {
           subtotal={subtotal}
           total={total}
           onIncrease={increaseQuantity}
+          canIncrease={(id) => { const pr = products.find((p) => p.id === id); return !pr || canPrepareOneMore(pr); }}
           onDecrease={decreaseQuantity}
           onRemove={removeItem}
           onContinue={openPayment}

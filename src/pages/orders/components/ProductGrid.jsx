@@ -2,7 +2,7 @@
 
 import ProductCard from "./ProductCard";
 
-function ProductGrid({ products, onAddToCart }) {
+function ProductGrid({ products, onAddToCart, canPrepare }) {
   if (products.length === 0) {
     return (
       <p className="orders-page__empty-products">
@@ -18,6 +18,7 @@ function ProductGrid({ products, onAddToCart }) {
           key={product.id}
           product={product}
           onAddToCart={onAddToCart}
+          available={canPrepare ? canPrepare(product) : true}
         />
       ))}
     </section>

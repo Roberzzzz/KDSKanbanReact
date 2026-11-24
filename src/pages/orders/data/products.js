@@ -21,6 +21,12 @@ export async function fetchMenu() {
     price: Number(p.precio),
     description: p.descripcion,
     image: resolveProductImage(p.imagen),
+    // Receta con el stock actual de cada ingrediente (para validar disponibilidad en el carrito)
+    receta: (p.receta || []).map((r) => ({
+      ingredienteId: r.ingrediente_id,
+      cantidad: Number(r.cantidad),
+      stock: Number(r.stock),
+    })),
   }));
 }
 
