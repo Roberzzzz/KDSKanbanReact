@@ -93,7 +93,7 @@ router.get('/historial', async (req, res) => {
 router.post('/', async (req, res) => {
   const client = await pool.connect();
   try {
-    const { mesa, nombre_cliente, metodo_pago_id, items } = req.body;
+    const { mesa, nombre_cliente, metodo_pago_id, metodo_pago, items } = req.body;
 
     if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: 'El carrito está vacío.' });
@@ -109,6 +109,20 @@ router.post('/', async (req, res) => {
     }
 
     await client.query('BEGIN');
+
+    // Método de pago: se resuelve por código ('efectivo', 'pago_movil', 'tarjeta'); si no viene, por id
+    let metodoPagoFinal = metodo_pago_id || 1;
+    if (metodo_pago) {
+      const { rows: metodoRows } = await client.query(
+        'SELECT id FROM public.metodos_pago WHERE codigo = $1',
+        [String(metodo_pago)]
+      );
+      if (metodoRows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'Método de pago no disponible.' });
+      }
+      metodoPagoFinal = metodoRows[0].id;
+    }
 
     // ── 0. Verificar que los productos existan y estén activos; el precio sale de la BD ──
     // FOR SHARE evita que el admin inactive/modifique un producto justo durante este pedido.
@@ -194,7 +208,7 @@ router.post('/', async (req, res) => {
     const { rows: pedidoRows } = await client.query(insertPedido, [
       mesa || 'Mesa / Local',
       nombre_cliente || 'Cliente',
-      metodo_pago_id || 1,
+      metodoPagoFinal,
     ]);
     const nuevoPedido = pedidoRows[0];
 

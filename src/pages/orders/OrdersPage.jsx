@@ -27,10 +27,14 @@ function OrdersPage({ setView, view }) {
   const [cartItems, setCartItems] = useState([]);
   // true cuando la ventana de pago está abierta
   const [isPaymentOpen, setIsPaymentOpen] = useState(false);
-  // Método elegido: "" (ninguno), "efectivo" o "tarjeta"
+  // Método elegido: "" (ninguno), "efectivo", "pago_movil" o "tarjeta"
   const [paymentMethod, setPaymentMethod] = useState("");
   // Pedido confirmado (null mientras no se haya confirmado ninguno)
   const [confirmedOrder, setConfirmedOrder] = useState(null);
+  // true mientras se registra el pedido en el servidor
+  const [processingPayment, setProcessingPayment] = useState(false);
+  // Candado para que un mismo pago no genere pedidos duplicados (doble clic, reintentos)
+  const submittingRef = useRef(false);
   // Estado para la ventana flotante de avisos / errores de stock o límites
   const [alertaModal, setAlertaModal] = useState({ visible: false, mensaje: "" });
 
@@ -225,19 +229,29 @@ function OrdersPage({ setView, view }) {
   }
 
   function closePayment() {
+    if (processingPayment) return;
     setIsPaymentOpen(false);
   }
 
-  async function confirmOrder() {
-    if (cartItems.length === 0 || paymentMethod === "") return;
+  // `pago` lo entrega PaymentModal solo cuando el pago quedó aprobado o registrado
+  // (o es efectivo); un pago rechazado nunca llega aquí.
+  async function confirmOrder(pago) {
+    if (cartItems.length === 0 || paymentMethod === "" || !pago || pago.tipo !== paymentMethod) return;
+    if (submittingRef.current) return;
+    submittingRef.current = true;
+    setProcessingPayment(true);
 
-    // ID de método de pago según tu tabla 'metodos_pago' (1: Efectivo, 2: Tarjeta)
-    const metodoPagoId = paymentMethod === "efectivo" ? 1 : 2;
+    const pagoSimulado = paymentMethod !== "efectivo";
+
+    // ID de respaldo según 'metodos_pago' (1: Efectivo, 2: Tarjeta, 3: Pago móvil);
+    // el backend resuelve el método por su código.
+    const metodoPagoId = { efectivo: 1, tarjeta: 2, pago_movil: 3 }[paymentMethod];
 
     const payload = {
       mesa: "Mesa / Local",
       nombre_cliente: "Cliente",
       metodo_pago_id: metodoPagoId,
+      metodo_pago: paymentMethod,
       items: cartItems.map((item) => ({
         producto_id: item.id,
         cantidad: item.quantity,
@@ -264,6 +278,7 @@ function OrdersPage({ setView, view }) {
           items: cartItems,
           total: total,
           paymentMethod: paymentMethod,
+          payment: pagoSimulado ? pago : null,
           status: "pendiente",
         });
 
@@ -274,13 +289,22 @@ function OrdersPage({ setView, view }) {
         // Capturamos el mensaje de error devuelto por el backend (ej. falta de stock de ingredientes)
         const errorData = await response.json();
         setIsPaymentOpen(false); // Cerramos el modal de pago para que vea la alerta
-        mostrarAviso(errorData.error || "Error al registrar el pedido en el servidor.");
+        const detalle = errorData.error || "Error al registrar el pedido en el servidor.";
+        mostrarAviso(pagoSimulado ? `${detalle} El pago simulado fue anulado.` : detalle);
         // Si el error fue por un producto que ya no está disponible, se actualiza el menú y el carrito
         loadMenu({ avisar: false });
       }
     } catch (error) {
       console.error("Error de conexión con el backend:", error);
-      mostrarAviso("⚠️ Error de conexión con el servidor. Inténtalo de nuevo.");
+      setIsPaymentOpen(false);
+      mostrarAviso(
+        pagoSimulado
+          ? "⚠️ No pudimos registrar el pedido. El pago simulado fue anulado; inténtalo de nuevo."
+          : "⚠️ Error de conexión con el servidor. Inténtalo de nuevo."
+      );
+    } finally {
+      submittingRef.current = false;
+      setProcessingPayment(false);
     }
   }
 
@@ -343,6 +367,7 @@ function OrdersPage({ setView, view }) {
           onSelectMethod={setPaymentMethod}
           onConfirm={confirmOrder}
           onClose={closePayment}
+          processing={processingPayment}
         />
       )}
 

@@ -1,4 +1,4 @@
-// Confirmación visual del pedido. Todo es local: no se envía nada a la cocina.
+// Confirmación visual del pedido (y del pago simulado, si fue con tarjeta o pago móvil).
 
 import { formatPrice, paymentMethods } from "../data/products";
 import "../styles/PaymentModal.css";
@@ -45,8 +45,20 @@ function OrderConfirmation({ order, onBackToMenu }) {
           Método de pago: <strong>{methodLabel}</strong>
         </p>
 
+        {order.paymentMethod === "tarjeta" && order.payment?.codigo && (
+          <p className="orders-page__confirmation-method">
+            Operación aprobada en punto de venta simulado · Autorización <strong>{order.payment.codigo}</strong>
+          </p>
+        )}
+        {order.paymentMethod === "pago_movil" && order.payment?.referencia && (
+          <p className="orders-page__confirmation-method">
+            Pago móvil registrado (simulado) · {order.payment.banco} · Ref.{" "}
+            <strong>****{order.payment.referencia.slice(-4)}</strong>
+          </p>
+        )}
+
         <p className="orders-page__modal-note">
-          Tu pedido se registró en la demostración. PROXIMAMENTE FUNCIONAL.
+          Tu pedido fue enviado a cocina. Te avisaremos cuando esté listo.
         </p>
 
         <button

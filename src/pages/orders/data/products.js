@@ -1,8 +1,3 @@
-// Datos de la página de pedidos: menú (desde la base de datos) y métodos de pago.
-// El menú ya no está escrito a mano: se consulta al backend (GET /api/productos), que solo
-// devuelve los productos activos. Las ilustraciones locales y las imágenes subidas desde el
-// panel de administración se resuelven en productHelpers.js.
-
 import { API_PRODUCTOS_URL, resolveProductImage } from "../../../productHelpers";
 
 // Consulta el menú y lo deja con el formato que usan los componentes de la página de pedidos.
@@ -34,12 +29,17 @@ export const paymentMethods = [
   {
     id: "efectivo",
     label: "Efectivo",
-    description: "Pagas al recibir tu pedido.",
+    description: "Paga al recibir tu pedido.",
+  },
+  {
+    id: "pago_movil",
+    label: "Pago móvil",
+    description: "Realiza pago móvil e indica la referencia.",
   },
   {
     id: "tarjeta",
     label: "Tarjeta",
-    description: "Pago simulado, sin datos bancarios.",
+    description: "Paga con punto de venta.",
   },
 ];
 
