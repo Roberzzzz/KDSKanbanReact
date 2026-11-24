@@ -189,8 +189,25 @@ export default function AdminUsers({ currentUser, setView, onLogout }) {
       setError(msg);
       mostrarAviso(msg, "error");
     }
+
+    const usuarioActualObj = usuarios.find(
+      (u) => String(u.id) === String(editingId)
+    );
+
+    if (
+      esEditandoPropioUsuario &&
+      usuarioActualObj &&
+      Number(rolId) !== Number(usuarioActualObj.rol_id)
+    ) {
+      const msg = "No puedes modificar tu propio rol.";
+      setError(msg);
+      mostrarAviso(msg, "error");
+      return;
+    }
   };
 
+  const esEditandoPropioUsuario =
+    editingId !== null && String(editingId) === String(currentUser?.id);
   const handleToggleBlock = async (user) => {
     if (user.id === currentUser.id) {
       alert("No puedes bloquear tu propio usuario administrador.");
@@ -355,6 +372,7 @@ export default function AdminUsers({ currentUser, setView, onLogout }) {
                 <select
                   id="adm-role"
                   value={rolId}
+                  disabled={esEditandoPropioUsuario}
                   onChange={(e) => setRolId(e.target.value)}
                 >
                   {roles.map((r) => (
@@ -363,6 +381,11 @@ export default function AdminUsers({ currentUser, setView, onLogout }) {
                     </option>
                   ))}
                 </select>
+                {esEditandoPropioUsuario && (
+                  <small className="admin-users__hint">
+                    Por seguridad, no puedes cambiar tu propio rol.
+                  </small>
+                )}
               </div>
 
               <div className="admin-users__field">
