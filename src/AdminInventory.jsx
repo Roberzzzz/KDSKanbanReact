@@ -47,7 +47,7 @@ export default function AdminInventory() {
     if (Number.isNaN(num)) return true;
 
     if (num < 0) {
-      mostrarAviso(`⚠️ ${etiquetaCampo} no puede ser menor a 0.`, "error");
+      mostrarAviso(`${etiquetaCampo} no puede ser menor a 0.`, "error");
       return false;
     }
 
@@ -125,7 +125,7 @@ export default function AdminInventory() {
     if (Number.isNaN(stockNum) || stockNum < 0) {
       const msg = "El stock inicial no puede ser menor a 0.";
       setError(msg);
-      mostrarAviso(`⚠️ ${msg}`, "error");
+      mostrarAviso(`${msg}`, "error");
       return;
     }
 
@@ -155,7 +155,7 @@ export default function AdminInventory() {
       await fetchIngredientes({ silent: true });
 
       mostrarAviso(
-        `✅ Ingrediente "${data.nombre}" añadido (${Number(data.stock_actual)} ${data.unidad_medida}).`,
+        `Ingrediente "${data.nombre}" añadido (${Number(data.stock_actual)} ${data.unidad_medida}).`,
         "ok"
       );
     } catch (err) {
@@ -180,14 +180,14 @@ export default function AdminInventory() {
           ? `La cantidad a sumar para "${ingrediente.nombre}" no puede ser menor a 0.`
           : `Ingresa una cantidad mayor a 0 para sumar a "${ingrediente.nombre}".`;
       setError(msg);
-      mostrarAviso(`⚠️ ${msg}`, "error");
+      mostrarAviso(`${msg}`, "error");
       return;
     }
 
     if (!Number.isInteger(cantidad) || String(rawValor).includes(".") || String(rawValor).includes(",")) {
       const msg = `No se permiten decimales al sumar stock a "${ingrediente.nombre}". Ingresa un número entero.`;
       setError(msg);
-      mostrarAviso(`⚠️ ${msg}`, "error");
+      mostrarAviso(`${msg}`, "error");
       return;
     }
 
@@ -212,7 +212,7 @@ export default function AdminInventory() {
 
       const nuevoStock = Number(data.stock_actual);
       mostrarAviso(
-        `✅ ${ingrediente.nombre}: se sumaron +${cantidad} ${ingrediente.unidad_medida} (${stockAnterior} → ${nuevoStock}).`,
+        `${ingrediente.nombre}: se sumaron +${cantidad} ${ingrediente.unidad_medida} (${stockAnterior} → ${nuevoStock}).`,
         "ok"
       );
     } catch (err) {
@@ -244,14 +244,14 @@ export default function AdminInventory() {
     if (stockAjuste === "" || Number.isNaN(valorAjustado) || valorAjustado < 0) {
       const msg = `El stock ajustado para "${ingrediente.nombre}" no puede ser menor a 0.`;
       setError(msg);
-      mostrarAviso(`⚠️ ${msg}`, "error");
+      mostrarAviso(`${msg}`, "error");
       return;
     }
 
     if (!Number.isInteger(valorAjustado) || String(stockAjuste).includes(".") || String(stockAjuste).includes(",")) {
       const msg = `No se permiten decimales al ajustar el stock de "${ingrediente.nombre}". Ingresa un número entero.`;
       setError(msg);
-      mostrarAviso(`⚠️ ${msg}`, "error");
+      mostrarAviso(`${msg}`, "error");
       return;
     }
 
@@ -277,7 +277,7 @@ export default function AdminInventory() {
 
       const nuevoStock = Number(data.stock_actual);
       mostrarAviso(
-        `🔧 Stock de ${ingrediente.nombre} ajustado: ${stockAnterior} → ${nuevoStock} ${ingrediente.unidad_medida}.`,
+        `Stock de ${ingrediente.nombre} ajustado: ${stockAnterior} → ${nuevoStock} ${ingrediente.unidad_medida}.`,
         "ok"
       );
     } catch (err) {
@@ -343,8 +343,8 @@ export default function AdminInventory() {
 
       mostrarAviso(
         activo
-          ? `✅ Ingrediente "${ingrediente.nombre}" activado.`
-          : `⏸️ Ingrediente "${ingrediente.nombre}" inactivado.`,
+          ? `Ingrediente "${ingrediente.nombre}" activado.`
+          : `Ingrediente "${ingrediente.nombre}" inactivado.`,
         "ok"
       );
     } catch (err) {
@@ -523,7 +523,7 @@ export default function AdminInventory() {
                 <option value="unidad">Unidad</option>
                 <option value="kg">Kilogramos (kg)</option>
                 <option value="g">Gramos (g)</option>
-                <option value="litro">Litros (L)</option>
+                <option value="litros">Litros (L)</option>
                 <option value="ml">Mililitros (ml)</option>
               </select>
             </div>

@@ -1,0 +1,8 @@
+Paso 1:
+Acceder al cmd desde C:\KDSKanbanReact y ejecutar npm run dev 
+
+Paso 2:
+Acceder al cmd desde C:\KDSKanbanReact\src\backend y ejecutar npm run dev para encender el backend
+
+Paso 3:
+Listo ya funciona con el localhost xd
